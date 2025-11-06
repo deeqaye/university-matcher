@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Results</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 15px; 
+            margin-bottom: 30px; 
+            text-align: center;
+        }
+        .header h1 {
+            font-size: 28px;
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .university-list { display: flex; flex-direction: column; gap: 30px; margin-bottom: 30px; }
+        .university-entry {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+        .university-number {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        .details-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            padding: 10px 0;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .detail-item:last-child {
+            border-bottom: none;
+        }
+        .detail-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 4px;
+        }
+        .detail-value {
+            font-size: 16px;
+            color: #333;
+            font-weight: 600;
+        }
+        .visual-section {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .university-image {
+            width: 100%;
+            height: 300px;
+            object-fit: cover;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .rationale-box {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            min-height: 200px;
+        }
+        .rationale-label {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+        .rationale-text {
+            color: #555;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .read-more {
+            margin-top: 15px;
+            padding: 12px 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .read-more-link {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .read-more-link:hover {
+            text-decoration: underline;
+        }
+        .note { text-align: center; color: #fff; margin-bottom: 12px; opacity: .9; }
+        .empty { background: white; padding: 30px; border-radius: 15px; text-align: center; color: #555; }
+        .nav { background: white; padding: 16px; border-radius: 12px; text-align: center; }
+        .nav a { color: #667eea; font-weight: 600; text-decoration: none; }
+        
+        @media (max-width: 900px) {
+            .university-entry {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>We Found Your Perfect Matches!</h1>
+            {% if preferences_used and total_matches %}
+                <p style="color: #667eea; font-size: 16px; margin-top: 10px;">Based on your preferences, we selected the top 5 universities from {{ total_matches }} matches</p>
+            {% elif total_matches %}
+                <p style="color: #667eea; font-size: 16px; margin-top: 10px;">Here are the top 5 universities from {{ total_matches }} matches</p>
+            {% endif %}
+        </div>
+
+        {% if error %}
+            <p class="note">{{ error }}</p>
+        {% endif %}
+
+        {% if results and results|length %}
+            {% if not gemini_enabled %}
+                <p class="note">Note: AI features are limited. Please configure your Gemini API key for full functionality.</p>
+            {% endif %}
+            <div class="university-list">
+                {% for uni in results %}
+                    <div class="university-entry">
+                        <div class="details-section">
+                            <div class="university-number">#{{ forloop.counter }} {{ uni.university }}</div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Location</span>
+                                <span class="detail-value">{{ uni.city }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Average GPA Required</span>
+                                <span class="detail-value">{{ uni.gpa_avg }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Minimum IELTS Score</span>
+                                <span class="detail-value">{{ uni.ielts_min }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Minimum SAT Score</span>
+                                <span class="detail-value">{{ uni.sat_min }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Annual Tuition (International)</span>
+                                <span class="detail-value">{{ uni.tuition }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Annual Tuition (Local)</span>
+                                <span class="detail-value">{{ uni.tuition_local }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Acceptance Rate</span>
+                                <span class="detail-value">{{ uni.acceptance_rate }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Global Ranking</span>
+                                <span class="detail-value">{{ uni.global_ranking }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">National Ranking</span>
+                                <span class="detail-value">{{ uni.national_ranking }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Teaching Languages</span>
+                                <span class="detail-value">{{ uni.languages }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Student-Faculty Ratio</span>
+                                <span class="detail-value">{{ uni.student_faculty_ratio }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Scholarships Available</span>
+                                <span class="detail-value">{{ uni.scholarship }}</span>
+                            </div>
+                            
+                            <div class="detail-item">
+                                <span class="detail-label">Institution Type</span>
+                                <span class="detail-value">{{ uni.public_private }}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="visual-section">
+                            <img class="university-image" src="{{ uni.image_url }}" alt="{{ uni.university }} image" onerror="this.onerror=null;this.src='https://via.placeholder.com/800x600?text=University+Image';">
+                            
+                            <div class="rationale-box" style="min-height: 180px;">
+                                <div class="rationale-label">University Overview</div>
+                                <div class="rationale-text">{{ uni.short_description|default:uni.description }}</div>
+                            </div>
+                            
+                            {% if preferences_used and uni.preference_explanation %}
+                            <div class="rationale-box" style="min-height: 180px;">
+                                <div class="rationale-label">Why This University Is Perfect For You</div>
+                                <div class="rationale-text">{{ uni.preference_explanation }}</div>
+                            </div>
+                            {% endif %}
+                            
+                            {% if uni.website != 'N/A' %}
+                            <div class="read-more">
+                                <a href="{{ uni.website }}" target="_blank" class="read-more-link">Read more: Link</a>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty">No matching universities found.</div>
+        {% endif %}
+
+        <div class="nav">
+            <a href="{% url 'universities:index' %}">Search again</a>
+        </div>
+    </div>
+</body>
+</html>

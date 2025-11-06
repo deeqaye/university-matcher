@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Match Results</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <style>
+        .container { max-width: 1100px; margin: 0 auto; padding: 1.5rem; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+        .card { border: 1px solid #e5e7eb; border-radius: .75rem; overflow: hidden; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+        .card img { width: 100%; height: 220px; object-fit: cover; display: block; }
+        .card-body { padding: 1rem; }
+        .title { font-size: 1.1rem; font-weight: 700; margin: 0 0 .25rem 0; }
+        .muted { color: #6b7280; margin: 0 0 .5rem 0; }
+        .meta { display: flex; gap: 1rem; flex-wrap: wrap; color: #374151; font-size: .95rem; }
+        .top { display:flex; align-items:center; justify-content: space-between; gap: .75rem; }
+        .badge { background: #eef2ff; color: #3730a3; padding: .2rem .5rem; border-radius: .4rem; font-weight: 600; }
+        .back { display:inline-block; margin: 1rem 0; }
+        .empty { color:#6b7280; }
+        .preference-explanation { 
+            background: #f0f9ff; 
+            border-left: 3px solid #667eea; 
+            padding: .75rem; 
+            margin: .75rem 0; 
+            border-radius: .5rem; 
+            font-size: .9rem; 
+            color: #1e40af;
+        }
+        .preference-explanation strong { color: #667eea; }
+        @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+    </head>
+<body>
+    <div class="container">
+        <h1>Top 5 Recommended Universities</h1>
+        {% if error %}
+            <p class="empty">{{ error }}</p>
+        {% endif %}
+        {% if results and results|length %}
+            {% if preferences_used %}
+                <p class="empty" style="margin-bottom: 1rem;">✨ These top 5 universities were selected by AI based on your preferences and requirements{% if total_matches %}. Found {{ total_matches }} total matches.{% endif %}</p>
+            {% elif total_matches %}
+                <p class="empty" style="margin-bottom: 1rem;">Showing top 5 of {{ total_matches }} matching universities. Add preferences in your search to get AI-powered personalized recommendations.</p>
+            {% endif %}
+            {% if not gemini_enabled %}
+                <p class="empty">AI descriptions are using a fallback because the LLM isn't configured.</p>
+            {% endif %}
+            <div class="grid">
+                {% for uni in results %}
+                <article class="card">
+                    <img src="{{ uni.image_url }}" alt="{{ uni.university }} campus image">
+                    <div class="card-body">
+                        <div class="top">
+                            <h2 class="title">{{ uni.university }}</h2>
+                            <span class="badge">{{ uni.country }}</span>
+                        </div>
+                        {% if preferences_used and uni.preference_explanation %}
+                        <div class="preference-explanation">
+                            <strong>✨ Why this matches your preferences:</strong> {{ uni.preference_explanation }}
+                        </div>
+                        {% endif %}
+                        <p class="muted">{{ uni.description }}</p>
+                        <div class="meta">
+                            <div>GPA min: <strong>{{ uni.GPA_min }}</strong></div>
+                            <div>SAT min: <strong>{{ uni.SAT_min }}</strong></div>
+                            <div>IELTS min: <strong>{{ uni.IELTS_min }}</strong></div>
+                            <div>Max cost: <strong>${{ uni.international_cost_max }}</strong></div>
+                        </div>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="empty">No matching universities found.</p>
+        {% endif %}
+        <p><a class="back" href="{% url 'universities:index' %}">Search again</a></p>
+    </div>
+    </body>
+    </html>

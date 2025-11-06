@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Find Your Perfect University</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .main-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            align-items: start;
+        }
+        
+        .hero-section {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: sticky;
+            top: 20px;
+        }
+        
+        .hero-image {
+            width: 100%;
+            height: 400px;
+            object-fit: cover;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .hero-title {
+            font-size: 28px;
+            color: #333;
+            font-weight: bold;
+            text-align: center;
+        }
+        
+        .hero-subtitle {
+            text-align: center;
+            color: #667eea;
+            font-size: 16px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .form-container {
+            background: white;
+            padding: 40px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 26px;
+            line-height: 1.2;
+        }
+        
+        .subtitle {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 16px;
+        }
+        
+        .form-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 600;
+        }
+        
+        input[type="text"],
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 12px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+            font-family: inherit;
+        }
+        
+        .custom-dropdown {
+            position: relative;
+        }
+        
+        .dropdown-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 18px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            transition: border-color 0.3s;
+        }
+        
+        .dropdown-header:hover {
+            border-color: #667eea;
+        }
+        
+        .dropdown-placeholder {
+            color: #666;
+        }
+        
+        .dropdown-arrow {
+            transition: transform 0.3s;
+            color: #667eea;
+        }
+        
+        .dropdown-header.open .dropdown-arrow {
+            transform: rotate(180deg);
+        }
+        
+        .dropdown-options {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            max-height: 300px;
+            overflow-y: auto;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 10px;
+            margin-top: 5px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        
+        .dropdown-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 18px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-weight: normal;
+        }
+        
+        .dropdown-option:hover {
+            background-color: #f0f4ff;
+        }
+        
+        .dropdown-option input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+        
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+        
+        input:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .help-text {
+            font-size: 13px;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .submit-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s;
+            margin-top: 10px;
+        }
+        
+        .submit-btn:hover {
+            transform: scale(1.02);
+        }
+        
+        .submit-btn:active {
+            transform: scale(0.98);
+        }
+        
+        .nav-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .nav-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 600;
+        }
+        
+        .nav-link a:hover {
+            text-decoration: underline;
+        }
+        
+        .checkbox-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: normal;
+            cursor: pointer;
+        }
+        
+        .checkbox-label input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+        
+        .level-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        
+        .level-table th,
+        .level-table td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #e0e0e0;
+        }
+        
+        .level-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .level-table td:first-child {
+            text-align: left;
+            font-weight: 600;
+            color: #667eea;
+        }
+        
+        .level-table input[type="radio"] {
+            width: auto;
+            cursor: pointer;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+            .hero-section {
+                position: static;
+            }
+            .checkbox-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+        
+        @media (max-width: 600px) {
+            .checkbox-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="main-container">
+        <!-- Hero Section with Image -->
+        <div class="hero-section">
+            <img class="hero-image" src="/static/images/universities/heidelberg-university.jpg" alt="European University Campus" onerror="this.src='https://picsum.photos/seed/euro-university/800/600';">
+            <div class="hero-subtitle">Discover Your Future</div>
+            <h2 class="hero-title">European Universities Await</h2>
+            <p style="text-align: center; color: #666; line-height: 1.6;">
+                Join thousands of international students pursuing world-class education across Europe. 
+                Find universities that match your academic profile, budget, and personal preferences.
+            </p>
+        </div>
+        
+        <!-- Form Section -->
+        <div class="form-container">
+            <h1>🎓 Find Your Perfect University in Europe</h1>
+            <p class="subtitle">Tell us about yourself and we'll find the best matches</p>
+            
+            <form method="post" action="{% url 'universities:results' %}" id="universityForm">
+                {% csrf_token %}
+
+            <div class="form-group">
+                <label for="countries">Countries 🌍</label>
+                <div class="custom-dropdown" id="countriesDropdown">
+                    <div class="dropdown-header" id="countriesHeader">
+                        <span class="dropdown-placeholder">Select countries...</span>
+                        <span class="dropdown-arrow">▼</span>
+                    </div>
+                    <div class="dropdown-options" id="countriesOptions" style="display: none;">
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Austria"> Austria</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Belgium"> Belgium</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Croatia"> Croatia</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Cyprus"> Cyprus</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Czechia"> Czechia</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Denmark"> Denmark</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Estonia"> Estonia</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Finland"> Finland</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="France"> France</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Germany"> Germany</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Greece"> Greece</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Hungary"> Hungary</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Italy"> Italy</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Latvia"> Latvia</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Netherlands"> Netherlands</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Norway"> Norway</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Poland"> Poland</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Romania"> Romania</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Serbia"> Serbia</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Slovakia"> Slovakia</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Spain"> Spain</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Sweden"> Sweden</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Switzerland"> Switzerland</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="Turkiye"> Turkiye</label>
+                        <label class="dropdown-option"><input type="checkbox" name="countries" value="UK"> UK</label>
+                    </div>
+                </div>
+                <p class="help-text">Click to select multiple countries</p>
+            </div>
+            
+            <div class="form-group">
+                <label>Languages 🗣️</label>
+                <div class="checkbox-grid">
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="English" class="lang-checkbox"> English</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="German" class="lang-checkbox"> German</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="French" class="lang-checkbox"> French</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Spanish" class="lang-checkbox"> Spanish</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Italian" class="lang-checkbox"> Italian</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Dutch" class="lang-checkbox"> Dutch</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Swedish" class="lang-checkbox"> Swedish</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Danish" class="lang-checkbox"> Danish</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Norwegian" class="lang-checkbox"> Norwegian</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Finnish" class="lang-checkbox"> Finnish</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Polish" class="lang-checkbox"> Polish</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Czech" class="lang-checkbox"> Czech</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Greek" class="lang-checkbox"> Greek</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Turkish" class="lang-checkbox"> Turkish</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Hungarian" class="lang-checkbox"> Hungarian</label>
+                    <label class="checkbox-label"><input type="checkbox" name="languages" value="Romanian" class="lang-checkbox"> Romanian</label>
+                </div>
+                <p class="help-text">Select all languages you can study in</p>
+            </div>
+            
+            <div class="form-group" id="languageLevelsSection" style="display: none;">
+                <label>Language Proficiency Levels (CEFR) 📚</label>
+                <p class="help-text" style="margin-bottom: 10px;">Select your proficiency level for each language</p>
+                <table class="level-table" id="levelTable">
+                    <thead>
+                        <tr>
+                            <th>Language</th>
+                            <th>A1</th>
+                            <th>A2</th>
+                            <th>B1</th>
+                            <th>B2</th>
+                            <th>C1</th>
+                            <th>C2</th>
+                        </tr>
+                    </thead>
+                    <tbody id="levelTableBody">
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="form-group">
+                <label for="gpa">Your GPA (out of 4.0) 📊</label>
+                <input type="number" id="gpa" name="gpa" step="0.01" min="0" max="4.0" placeholder="e.g., 3.5" required>
+                <p class="help-text">Enter your cumulative GPA on a 4.0 scale</p>
+            </div>
+
+            <div class="form-group">
+                <label for="sat">SAT Score 📝</label>
+                <input type="number" id="sat" name="sat" min="0" max="1600" placeholder="e.g., 1450" required>
+            </div>
+
+            <div class="form-group">
+                <label for="ielts">Your IELTS Score 🎯</label>
+                <input type="number" id="ielts" name="ielts" step="0.5" min="0" max="9" placeholder="e.g., 7.0" required>
+            </div>
+
+            <div class="form-group">
+                <label for="budget_max">Maximum Annual Budget (USD) 💰</label>
+                <input type="number" id="budget_max" name="budget_max" min="0" placeholder="e.g., 30000" required>
+                <p class="help-text">Maximum you can spend per year on tuition</p>
+            </div>
+
+            <div class="form-group">
+                <label for="public_preference">Institution Type Preference 🏛️</label>
+                <select name="public_preference" id="public_preference">
+                    <option value="-1" selected>No preference</option>
+                    <option value="1">Public institutions</option>
+                    <option value="0">Private institutions</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="preferences">Additional Preferences & Requirements 📝</label>
+                <textarea id="preferences" name="preferences" rows="4" placeholder="e.g., I'm interested in research-focused universities with strong engineering programs. I prefer urban campuses with good public transportation. I'm looking for universities with active student clubs and international student support services."></textarea>
+                <p class="help-text">Tell us about your specific preferences, interests, program focus, campus culture, location preferences, or any other factors important to you. This will help our AI select the top 5 most suitable universities for you.</p>
+            </div>
+
+            <button class="submit-btn" type="submit">Find My Perfect Universities</button>
+            </form>
+            
+            <div class="nav-link">
+                <a href="/">← Back to home</a>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Custom dropdown for countries
+        const countriesDropdown = document.getElementById('countriesDropdown');
+        const countriesHeader = document.getElementById('countriesHeader');
+        const countriesOptions = document.getElementById('countriesOptions');
+        const countriesCheckboxes = document.querySelectorAll('#countriesOptions input[type="checkbox"]');
+        
+        countriesHeader.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const isOpen = countriesOptions.style.display === 'block';
+            countriesOptions.style.display = isOpen ? 'none' : 'block';
+            countriesHeader.classList.toggle('open', !isOpen);
+        });
+        
+        // Update header text when countries are selected
+        function updateCountriesHeader() {
+            const selected = Array.from(countriesCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+            
+            const placeholder = countriesHeader.querySelector('.dropdown-placeholder');
+            if (selected.length === 0) {
+                placeholder.textContent = 'Select countries...';
+                placeholder.style.color = '#666';
+            } else if (selected.length <= 3) {
+                placeholder.textContent = selected.join(', ');
+                placeholder.style.color = '#333';
+            } else {
+                placeholder.textContent = `${selected.length} countries selected`;
+                placeholder.style.color = '#333';
+            }
+        }
+        
+        countriesCheckboxes.forEach(cb => {
+            cb.addEventListener('change', updateCountriesHeader);
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!countriesDropdown.contains(e.target)) {
+                countriesOptions.style.display = 'none';
+                countriesHeader.classList.remove('open');
+            }
+        });
+        
+        // Dynamic language level table
+        const languageCheckboxes = document.querySelectorAll('.lang-checkbox');
+        const levelSection = document.getElementById('languageLevelsSection');
+        const levelTableBody = document.getElementById('levelTableBody');
+        const levels = ['A1', 'A2', 'B1', 'B2', 'C1', 'C2'];
+        
+        function updateLanguageLevelTable() {
+            const selectedLanguages = Array.from(languageCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+            
+            if (selectedLanguages.length === 0) {
+                levelSection.style.display = 'none';
+                levelTableBody.innerHTML = '';
+                return;
+            }
+            
+            levelSection.style.display = 'block';
+            levelTableBody.innerHTML = '';
+            
+            selectedLanguages.forEach(lang => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${lang}</td>
+                    ${levels.map(level => `
+                        <td><input type="radio" name="level_${lang}" value="${level}"></td>
+                    `).join('')}
+                `;
+                levelTableBody.appendChild(row);
+            });
+        }
+        
+        languageCheckboxes.forEach(cb => {
+            cb.addEventListener('change', updateLanguageLevelTable);
+        });
+        
+        // Form submission handler
+        document.getElementById('universityForm').addEventListener('submit', function(e) {
+            const selectedLanguages = Array.from(languageCheckboxes)
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+            
+            if (selectedLanguages.length === 0) {
+                alert('Please select at least one language');
+                e.preventDefault();
+                return;
+            }
+            
+            // Collect language levels
+            const langLevels = [];
+            selectedLanguages.forEach(lang => {
+                const selectedLevel = document.querySelector(`input[name="level_${lang}"]:checked`);
+                if (selectedLevel) {
+                    langLevels.push(selectedLevel.value);
+                } else {
+                    langLevels.push('B2'); // Default level
+                }
+            });
+            
+            // Create hidden inputs for compatibility with backend
+            const languagesInput = document.createElement('input');
+            languagesInput.type = 'hidden';
+            languagesInput.name = 'languages_list';
+            languagesInput.value = selectedLanguages.join(',');
+            this.appendChild(languagesInput);
+            
+            const levelsInput = document.createElement('input');
+            levelsInput.type = 'hidden';
+            levelsInput.name = 'lang_levels';
+            levelsInput.value = langLevels.join(',');
+            this.appendChild(levelsInput);
+        });
+    </script>
+</body>
+</html>

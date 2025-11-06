@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Matcher</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <style>
+        .container { max-width: 900px; margin: 0 auto; padding: 1.5rem; font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; }
+        .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+        .field { display: flex; flex-direction: column; gap: .4rem; }
+        label { font-weight: 600; }
+        input, select { padding: .6rem .7rem; border: 1px solid #d0d7de; border-radius: .5rem; }
+        .help { font-size: .86rem; color: #6b7280; }
+        .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
+        button { margin-top: 1rem; background: #2563eb; color: #fff; border: 0; padding: .8rem 1rem; border-radius: .6rem; cursor: pointer; }
+        header h1 { font-size: 1.6rem; margin-bottom: 1rem; }
+        .muted { color: #6b7280; }
+    </style>
+    </head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Find Your Ideal University</h1>
+            <p class="muted">Enter your preferences and we'll find matches with AI summaries and images.</p>
+        </header>
+        <main>
+            <form method="POST" action="{% url 'universities:results' %}">
+                {% csrf_token %}
+                <div class="grid">
+                    <div class="field">
+                        <label for="gpa">GPA</label>
+                        <input type="number" name="gpa" step="0.01" min="0" max="4.0" placeholder="e.g. 3.5" required>
+                    </div>
+                    <div class="field">
+                        <label for="sat">SAT score</label>
+                        <input type="number" name="sat" min="0" max="1600" placeholder="e.g. 1450" required>
+                    </div>
+                    <div class="field">
+                        <label for="ielts">IELTS</label>
+                        <input type="number" name="ielts" step="0.5" min="0" max="9" placeholder="e.g. 7.0" required>
+                    </div>
+                    <div class="field">
+                        <label for="budget_max">Maximum annual budget (USD)</label>
+                        <input type="number" name="budget_max" min="0" placeholder="e.g. 30000" required>
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="field">
+                        <label for="countries">Preferred countries</label>
+                        <input type="text" name="countries" placeholder="Comma-separated, e.g. USA, Canada, UK">
+                        <div class="help">You can list multiple; we'll consider all.</div>
+                    </div>
+                    <div class="field">
+                        <label for="languages">Preferred languages</label>
+                        <input type="text" name="languages" placeholder="Comma-separated, e.g. English, Spanish">
+                    </div>
+                </div>
+
+                <div class="grid" style="margin-top: 1rem;">
+                    <div class="field">
+                        <label for="lang_levels">Language levels (aligned to languages order)</label>
+                        <input type="text" name="lang_levels" placeholder="Comma-separated, e.g. C1, B2">
+                        <div class="help">Optional. Provide one level per language if you want.</div>
+                    </div>
+                    <div class="field">
+                        <label>Institution type preference</label>
+                        <div class="row">
+                            <label><input type="radio" name="public_preference" value="1"> Public</label>
+                            <label><input type="radio" name="public_preference" value="0"> Private</label>
+                            <label><input type="radio" name="public_preference" value="-1" checked> No preference</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="field" style="margin-top: 1rem; grid-column: 1 / -1;">
+                    <label for="preferences">Additional Preferences & Requirements 📝</label>
+                    <textarea name="preferences" id="preferences" rows="4" placeholder="e.g., I'm interested in research-focused universities with strong engineering programs. I prefer urban campuses with good public transportation. I'm looking for universities with active student clubs and international student support services." style="padding: .6rem .7rem; border: 1px solid #d0d7de; border-radius: .5rem; font-family: inherit; resize: vertical;"></textarea>
+                    <div class="help">Tell us about your specific preferences, interests, program focus, campus culture, location preferences, or any other factors important to you. This will help our AI select the top 5 most suitable universities for you.</div>
+                </div>
+
+                <button type="submit">Find universities</button>
+            </form>
+
+            <section style="margin-top: 2rem;">
+                <h2>Ask Gemini</h2>
+                <a href="{% url 'gemini:inquire' %}">Try a free-form Gemini inquiry</a>
+            </section>
+        </main>
+        <footer style="margin-top: 2rem;">
+            <p class="muted">&copy; {{ current_year }} University Matcher</p>
+        </footer>
+    </div>
+    </body>
+    </html>
