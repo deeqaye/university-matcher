@@ -126,7 +126,7 @@ def get_llm_model(model_name):
 
 def index(request):
     # Load unique countries and languages from CSV
-    csv_path = Path(settings.BASE_DIR).parent / 'data.csv'
+    csv_path = Path(settings.BASE_DIR) / 'data.csv'
     try:
         df = pd.read_csv(csv_path)
         countries = sorted(df['country'].unique().tolist())
@@ -1003,7 +1003,7 @@ def results(request):
                 'public_preference': int(request.POST.get('public_preference', -1)),
             }
             
-            csv_path = Path(settings.BASE_DIR).parent / 'data.csv'
+            csv_path = Path(settings.BASE_DIR) / 'data.csv'
             data = pd.read_csv(csv_path)
             df = uni_find_wrapper.preprocess_university_data(data)
             result = uni_find_wrapper.calculate_match_score(df, user_input)
