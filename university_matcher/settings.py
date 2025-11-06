@@ -11,12 +11,12 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure-your-secret-key-here-change-in-production')
+SECRET_KEY = 'django-insecure-your-secret-key-here-change-in-production'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DEBUG', 'True') == 'True'
+DEBUG = True
 
-ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
+ALLOWED_HOSTS = []
 
 # Application definition
 INSTALLED_APPS = [
@@ -32,7 +32,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add WhiteNoise for static files
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -99,15 +98,12 @@ STATICFILES_DIRS = [
     BASE_DIR / 'static',
 ]
 
-# WhiteNoise configuration for serving static files
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
-
 # Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Google Gemini API Key (primary)
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-
-# OpenRouter API Key (optional alternative)
+# OpenRouter API Key for Gemini 2.0 Flash (free)
 # Get your API key from https://openrouter.ai/keys
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')  # Leave empty to use Google's API
+OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')  # Add your OpenRouter API key here
+
+# Legacy Google Gemini API Key (keeping as fallback)
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY', 'AIzaSyA_ULCqmxYyNSt0S5XURKRjhi7-Lu3T79c')
