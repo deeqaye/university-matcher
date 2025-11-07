@@ -1,0 +1,11 @@
+# Ignore these files during deployment to save space
+test_images.py
+download_university_images.py
+download_sample_images.py
+retry_failed_images.py
+README.md
+DEPLOYMENT.md
+OPENROUTER_SETUP.md
+
+
+

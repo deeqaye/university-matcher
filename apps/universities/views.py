@@ -173,9 +173,21 @@ def get_university_image(university_name, country):
 def get_university_info_from_csv(university_name, country):
     """Load info.csv and find matching university data with improved matching"""
     try:
-        info_csv_path = Path(settings.BASE_DIR).parent.parent / 'info.csv'
-        if not info_csv_path.exists():
-            print(f"INFO: CSV file not found at {info_csv_path}")
+        # Try multiple paths for info.csv
+        possible_paths = [
+            Path(settings.BASE_DIR) / 'info.csv',
+            Path(settings.BASE_DIR).parent / 'info.csv',
+            Path(settings.BASE_DIR).parent.parent / 'info.csv',
+        ]
+        
+        info_csv_path = None
+        for path in possible_paths:
+            if path.exists():
+                info_csv_path = path
+                break
+        
+        if not info_csv_path:
+            # info.csv is optional - return None to use data.csv only
             return None
         
         info_df = pd.read_csv(info_csv_path)
