@@ -12,6 +12,7 @@ import streamlit as st
 from urllib.parse import quote
 import re
 import base64
+from html import escape
 import requests
 import django
 
@@ -40,14 +41,14 @@ PLACEHOLDER_IMAGE_BYTES = base64.b64decode(
 st.markdown(
     """
     <style>
-    .match-card {background-color:#ffffff;padding:1.75rem;border-radius:20px;box-shadow:0 18px 35px rgba(40,47,60,0.1);margin-bottom:2.25rem;border:1px solid rgba(102,126,234,0.08);}
-    .match-card h3 {margin-bottom:0.25rem;font-size:1.5rem;}
-    .match-card .match-meta {color:#667eea;font-weight:600;margin-bottom:1rem;}
-    .match-card .preference-text {font-size:1rem;line-height:1.65;margin-bottom:1.25rem;color:#2f3b52;}
-    .match-card ul {padding-left:1.2rem;margin-bottom:1.1rem;}
-    .match-card ul li {margin-bottom:0.35rem;}
+    body, .match-card, .body-text {font-family:'Inter', 'Segoe UI', sans-serif !important;font-size:1rem;line-height:1.7;color:#263044;}
+    .match-card {background-color:#ffffff;padding:1.8rem;border-radius:20px;box-shadow:0 18px 35px rgba(40,47,60,0.12);margin-bottom:2.6rem;border:1px solid rgba(102,126,234,0.08);}
+    .match-card h3 {margin-bottom:0.4rem;font-size:1.55rem;color:#1d2540;}
+    .match-card .match-meta {color:#5b6dee;font-weight:600;margin-bottom:1.1rem;}
     .fact-pill {background:rgba(102,126,234,0.12);padding:6px 12px;border-radius:999px;font-size:0.85rem;margin-right:8px;margin-bottom:8px;display:inline-block;color:#43527c;font-weight:600;}
-    .image-caption {font-size:0.85rem;color:#69758c;text-align:center;margin-top:0.5rem;}
+    .body-text {margin-bottom:1rem;}
+    .body-text strong {color:#1d2540;}
+    .image-caption {font-size:0.85rem;color:#69758c;text-align:center;margin-top:0.6rem;}
     </style>
     """,
     unsafe_allow_html=True,
@@ -130,6 +131,10 @@ def format_currency(value) -> str:
     if amount is None:
         return str(value) if value not in (None, "") else "N/A"
     return f"${amount:,.0f}"
+
+
+def paragraph_html(text: str) -> str:
+    return escape(text).replace("\n", "<br>")
 
 
 @st.cache_data(show_spinner=False)
@@ -299,6 +304,10 @@ def build_preference_explanation(
     if scholarship_info == "yes":
         sentences.append("Scholarship opportunities are available, giving you more flexibility to manage costs.")
 
+    preferences_text = user_input.get("preferences_text", "")
+    if preferences_text:
+        sentences.append(f"This aligns with your note: {preferences_text}.")
+
     if not sentences:
         sentences.append(f"{university} aligns well with your academic profile and study preferences.")
 
@@ -320,6 +329,10 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
     preference_text = (llm_meta or {}).get("preference_explanation") or build_preference_explanation(
         university, country, pd.Series(record), info_row, user_input, stats
     )
+
+    pref_note = user_input.get("preferences_text", "").strip()
+    if pref_note and pref_note.lower() not in preference_text.lower():
+        preference_text = f"{preference_text} This reflects your request: {pref_note}."
 
     short_description = ""
     if getattr(uni_views, "GEMINI_ENABLED", False):
@@ -363,7 +376,11 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
         ]
     )
 
-    fact_items = [(label, value) for label, value in fact_items if value not in (None, "", "N/A")]
+    fact_items = [
+        (label, value)
+        for label, value in fact_items
+        if value not in (None, "", "N/A") and str(value).lower() not in {"nan", "none"}
+    ]
 
     website = ""
     if info_row is not None:
@@ -376,16 +393,20 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
         col_text, col_image = st.columns([1.8, 1], gap="large")
 
         with col_text:
-            st.write(preference_text)
-            st.markdown(f"_Summary_: {short_description}")
+            st.markdown(f"<p class='body-text'>{paragraph_html(preference_text)}</p>", unsafe_allow_html=True)
+            st.markdown(
+                f"<p class='body-text'><strong>Snapshot:</strong> {paragraph_html(short_description)}</p>",
+                unsafe_allow_html=True,
+            )
 
             if fact_items:
-                st.markdown("**Key facts**")
-                for label, value in fact_items:
-                    st.markdown(f"• **{label}:** {value}")
+                facts_html = "<ul class='body-text'>" + "".join(
+                    f"<li><strong>{escape(label)}:</strong> {escape(str(value))}</li>" for label, value in fact_items
+                ) + "</ul>"
+                st.markdown(facts_html, unsafe_allow_html=True)
 
             with st.expander("Comprehensive overview"):
-                st.write(long_description)
+                st.markdown(f"<p class='body-text'>{paragraph_html(long_description)}</p>", unsafe_allow_html=True)
 
             if website:
                 st.markdown(f"[Visit official site ↗]({website})")
@@ -460,6 +481,8 @@ def main() -> None:
         st.warning("Please select at least one language option.")
         return
 
+    preferences_prompt = user_preferences.strip()
+
     user_input = {
         "countries": selected_countries,
         "languages": selected_languages,
@@ -469,6 +492,7 @@ def main() -> None:
         "sat": int(sat_score),
         "budget_max": float(budget),
         "public_preference": public_preference,
+        "preferences_text": preferences_prompt,
     }
 
     matches_df = calculate_match_score(processed_df.copy(), user_input)
@@ -483,9 +507,9 @@ def main() -> None:
     selected_records = matches_records[:top_n]
     llm_meta_map: Dict[str, Dict[str, Any]] = {}
 
-    if user_preferences and getattr(uni_views, "GEMINI_ENABLED", False):
+    if preferences_prompt and getattr(uni_views, "GEMINI_ENABLED", False):
         try:
-            llm_selected = uni_views.select_top_universities_with_llm(matches_records, user_preferences, user_input)
+            llm_selected = uni_views.select_top_universities_with_llm(matches_records, preferences_prompt, user_input)
             if llm_selected:
                 llm_meta_map = {item["university"]: item for item in llm_selected}
                 ordered_names = [item["university"] for item in llm_selected]
