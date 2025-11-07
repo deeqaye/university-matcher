@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
 from urllib.parse import quote
+import re
+import base64
+from html import escape
 
 # Ensure the Django project modules are importable
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,6 +25,24 @@ from apps.universities.uni_find import (  # type: ignore  # pylint: disable=impo
 
 
 st.set_page_config(page_title="University Matcher", layout="wide")
+
+STATIC_IMAGE_DIR = BASE_DIR / "static" / "images" / "universities"
+
+st.markdown(
+    """
+    <style>
+    .match-card {background-color:#ffffff;padding:1.75rem;border-radius:20px;box-shadow:0 18px 35px rgba(40,47,60,0.1);margin-bottom:2.25rem;border:1px solid rgba(102,126,234,0.08);}
+    .match-card h3 {margin-bottom:0.25rem;font-size:1.5rem;}
+    .match-card .match-meta {color:#667eea;font-weight:600;margin-bottom:1rem;}
+    .match-card .preference-text {font-size:1rem;line-height:1.65;margin-bottom:1.25rem;color:#2f3b52;}
+    .match-card ul {padding-left:1.2rem;margin-bottom:1.1rem;}
+    .match-card ul li {margin-bottom:0.35rem;}
+    .fact-pill {background:rgba(102,126,234,0.12);padding:6px 12px;border-radius:999px;font-size:0.85rem;margin-right:8px;margin-bottom:8px;display:inline-block;color:#43527c;font-weight:600;}
+    .image-caption {font-size:0.85rem;color:#69758c;text-align:center;margin-top:0.5rem;}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 DATA_PATH = BASE_DIR / "data.csv"
 INFO_PATH_CANDIDATES = [
@@ -80,6 +101,28 @@ def find_info_row(info_df: Optional[pd.DataFrame], university: str, country: str
     return matches.iloc[0]
 
 
+def to_float(value) -> Optional[float]:
+    if value in (None, "", "N/A"):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    value_str = str(value).replace(",", "")
+    match = re.search(r"-?\d+(?:\.\d+)?", value_str)
+    if match:
+        try:
+            return float(match.group())
+        except ValueError:
+            return None
+    return None
+
+
+def format_currency(value) -> str:
+    amount = to_float(value)
+    if amount is None:
+        return str(value) if value not in (None, "") else "N/A"
+    return f"${amount:,.0f}"
+
+
 def build_description(university: str, country: str, stats: Dict[str, str], info_row: Optional[pd.Series]) -> str:
     parts: List[str] = []
 
@@ -130,14 +173,130 @@ def build_description(university: str, country: str, stats: Dict[str, str], info
     return " ".join(parts)
 
 
+def build_preference_explanation(
+    university: str,
+    country: str,
+    row: pd.Series,
+    info_row: Optional[pd.Series],
+    user_input: Dict[str, Any],
+    stats: Dict[str, Any],
+) -> str:
+    sentences: List[str] = []
+
+    selected_countries = user_input.get("countries", [])
+    if selected_countries:
+        if country in selected_countries:
+            if len(selected_countries) == 1:
+                sentences.append(f"You asked for universities in {selected_countries[0]}, and {university} keeps you right in {country}.")
+            else:
+                chosen = ", ".join(selected_countries)
+                sentences.append(f"{university} sits in {country}, one of your preferred study destinations ({chosen}).")
+        else:
+            sentences.append(f"{university} is located in {country}, giving you an additional option beyond your initial list ({', '.join(selected_countries)}).")
+
+    language_levels = {}
+    for idx, lang in enumerate(user_input.get("languages", [])):
+        if idx < len(user_input.get("lang_levels", [])):
+            language_levels[lang.lower()] = user_input["lang_levels"][idx]
+
+    teaching_languages_source = info_row.get("Language of teaching", "") if info_row is not None else row.get("language", "")
+    teaching_languages = [lang.strip().lower() for lang in str(teaching_languages_source).split(",") if lang.strip()]
+
+    # Language fit
+    if teaching_languages:
+        shown_language = None
+        for lang, level in language_levels.items():
+            if lang in teaching_languages:
+                if lang == "english":
+                    required_ielts = to_float(stats.get("IELTS_min"))
+                    if required_ielts is not None and user_input.get("ielts") is not None:
+                        user_ielts = user_input.get("ielts")
+                        if user_ielts >= required_ielts:
+                            sentences.append(
+                                f"Your IELTS {user_ielts:.1f} comfortably meets the {required_ielts:.1f} English requirement for this campus."
+                            )
+                            shown_language = "english"
+                            break
+                else:
+                    sentences.append(
+                        f"You indicated {lang.title()} at level {level}, which matches the teaching language options offered here."
+                    )
+                    shown_language = lang
+                    break
+        if shown_language is None and "english" in teaching_languages:
+            sentences.append("This university teaches in English, so IELTS will be the key requirement when you are ready to apply.")
+
+    # Academic profile fit
+    gpa_required = to_float(stats.get("GPA_min"))
+    if gpa_required is not None:
+        user_gpa = user_input.get("gpa")
+        if user_gpa is not None and user_gpa >= gpa_required:
+            sentences.append(f"Your GPA of {user_gpa:.2f} is above the expected {gpa_required:.2f} threshold.")
+
+    sat_required = to_float(stats.get("SAT_min"))
+    if sat_required:
+        user_sat = user_input.get("sat")
+        if user_sat and user_sat >= sat_required:
+            sentences.append(f"A SAT score of {user_sat} exceeds the stated benchmark of {int(sat_required)}.")
+
+    tuition_required = to_float(stats.get("international_cost_max"))
+    if tuition_required is None and info_row is not None:
+        tuition_required = to_float(info_row.get("Cost per year \nfor interational students"))
+    if tuition_required is not None:
+        budget = user_input.get("budget_max")
+        if budget:
+            if budget >= tuition_required:
+                sentences.append(f"The annual cost (~{format_currency(tuition_required)}) stays within your budget of {format_currency(budget)}.")
+            else:
+                sentences.append(
+                    f"Keep in mind the annual cost (~{format_currency(tuition_required)}) is above your stated budget of {format_currency(budget)}."
+                )
+
+    public_pref = user_input.get("public_preference")
+    if public_pref in (0, 1):
+        desired_type = "public" if public_pref == 1 else "private"
+        if info_row is not None:
+            actual_type = str(info_row.get("Public/Private", "")).strip().lower()
+        else:
+            public_flag = row.get("is_public")
+            actual_type = "public" if public_flag == 1 else "private" if public_flag == 0 else ""
+        if actual_type:
+            if desired_type in actual_type:
+                sentences.append(f"You preferred {desired_type} institutions, and this university fits that preference.")
+            else:
+                sentences.append(f"This institution is {actual_type}, which differs from your stated preference for {desired_type} options.")
+
+    scholarship_info = str(info_row.get("Scholarship (yes/no)", "")).strip().lower() if info_row is not None else ""
+    if scholarship_info == "yes":
+        sentences.append("Scholarship opportunities are available, giving you more flexibility to manage costs.")
+
+    if not sentences:
+        sentences.append(f"{university} aligns well with your academic profile and study preferences.")
+
+    return " ".join(sentences)
+
+
 def get_university_image(university: str, country: str) -> str:
+    safe_name = re.sub(r"[^\w\s-]", "", university.lower())
+    safe_name = re.sub(r"[-\s]+", "-", safe_name)
+    for extension in (".jpg", ".jpeg", ".png"):
+        static_path = STATIC_IMAGE_DIR / f"{safe_name}{extension}"
+        if static_path.exists():
+            try:
+                with static_path.open("rb") as img_file:
+                    encoded = base64.b64encode(img_file.read()).decode("utf-8")
+                mime = "image/png" if extension == ".png" else "image/jpeg"
+                return f"data:{mime};base64,{encoded}"
+            except Exception:
+                pass
     query = quote(f"{university} {country} campus")
     return f"https://source.unsplash.com/800x600/?{query}"
 
 
-def render_result_card(index: int, row: pd.Series, info_row: Optional[pd.Series]) -> None:
+def render_result_card(index: int, row: pd.Series, info_row: Optional[pd.Series], user_input: Dict[str, Any]) -> None:
     university = row["university"]
     country = row["country"]
+    match_score = int(row.get("match_score", 0))
 
     stats = {
         "GPA_min": row.get("GPA_min"),
@@ -146,48 +305,76 @@ def render_result_card(index: int, row: pd.Series, info_row: Optional[pd.Series]
         "international_cost_max": row.get("international_cost_max"),
     }
 
+    preference_text = build_preference_explanation(university, country, row, info_row, user_input, stats)
     description = build_description(university, country, stats, info_row)
-    image_url = get_university_image(university, country)
+    image_src = get_university_image(university, country)
 
-    col1, col2 = st.columns([2, 1])
+    teaching_languages_source = info_row.get("Language of teaching", "") if info_row is not None else row.get("language", "")
+    language_pills = "".join(
+        f"<span class='fact-pill'>{escape(lang.strip())}</span>"
+        for lang in str(teaching_languages_source).split(",")
+        if lang.strip()
+    )
 
-    with col1:
-        st.subheader(f"#{index} {university}")
-        st.markdown(f"**Match score:** {row.get('match_score', 0)} / 100")
-        st.markdown(description)
-
-        detail_lines = []
-        if info_row is not None:
-            detail_lines.extend(
-                [
-                    ("Acceptance rate", info_row.get("Acceptance rate (%)", "N/A")),
-                    ("Global ranking", info_row.get("Global ranking", "N/A")),
-                    ("National ranking", info_row.get("National ranking", "N/A")),
-                    ("Student-faculty ratio", info_row.get("Student to faculty ratio", "N/A")),
-                    ("Scholarships", info_row.get("Scholarship (yes/no)", "N/A")),
-                ]
-            )
-
-        detail_lines.extend(
+    quick_facts: List[tuple[str, str]] = []
+    if info_row is not None:
+        quick_facts.extend(
             [
-                ("Teaching languages", row.get("language", "N/A")),
-                ("Minimum GPA", row.get("GPA_min", "N/A")),
-                ("Minimum IELTS", row.get("IELTS_min", "N/A")),
-                ("Minimum SAT", row.get("SAT_min", "N/A")),
-                ("Annual tuition (international)", row.get("international_cost_max", "N/A")),
+                ("Acceptance rate", str(info_row.get("Acceptance rate (%)", "N/A"))),
+                ("Global ranking", str(info_row.get("Global ranking", "N/A"))),
+                ("National ranking", str(info_row.get("National ranking", "N/A"))),
+                ("Student-faculty ratio", str(info_row.get("Student to faculty ratio", "N/A"))),
+                ("Scholarships", str(info_row.get("Scholarship (yes/no)", "N/A"))),
             ]
         )
 
-        for label, value in detail_lines:
-            st.markdown(f"- **{label}:** {value if value not in (None, '') else 'N/A'}")
+    quick_facts.extend(
+        [
+            ("Minimum GPA", f"{row.get('GPA_min', 'N/A')}") if row.get("GPA_min") not in (None, "") else ("Minimum GPA", "N/A"),
+            ("Minimum IELTS", f"{row.get('IELTS_min', 'N/A')}") if row.get("IELTS_min") not in (None, "") else ("Minimum IELTS", "N/A"),
+            ("Minimum SAT", f"{row.get('SAT_min', 'N/A')}") if row.get("SAT_min") not in (None, "") else ("Minimum SAT", "N/A"),
+            ("Annual tuition (international)", format_currency(row.get("international_cost_max"))),
+        ]
+    )
 
-        if info_row is not None:
-            website = info_row.get("Link to official website", "").strip()
-            if website:
-                st.markdown(f"[Official website]({website})")
+    valid_facts = [(label, value) for label, value in quick_facts if value not in (None, "", "N/A")]
 
-    with col2:
-        st.image(image_url, caption=f"{university} campus", use_column_width=True)
+    facts_html = ""
+    if valid_facts:
+        facts_html = "<ul>" + "".join(
+            f"<li><strong>{escape(label)}:</strong> {escape(str(value))}</li>" for label, value in valid_facts
+        ) + "</ul>"
+
+    website_html = ""
+    if info_row is not None:
+        website = str(info_row.get("Link to official website", "")).strip()
+        if website:
+            website_html = f"<p><a href='{escape(website)}' target='_blank'>Visit official site ↗</a></p>"
+
+    card_html = f"""
+    <div class="match-card">
+      <h3>#{index} {escape(university)}</h3>
+      <div class="match-meta">{escape(country)} • Match score {match_score} / 100</div>
+      <div style="display:flex;flex-wrap:wrap;gap:1.75rem;align-items:flex-start;">
+        <div style="flex:1 1 360px;min-width:280px;">
+          <div class="preference-text">{escape(preference_text)}</div>
+          {language_pills}
+          {facts_html}
+          <details>
+            <summary>Full overview</summary>
+            <p>{escape(description)}</p>
+          </details>
+          {website_html}
+        </div>
+        <div style="flex:1 1 280px;min-width:240px;">
+          <img src="{image_src}" style="width:100%;border-radius:16px;object-fit:cover;max-height:340px;" alt="{escape(university)} campus image" />
+          <div class="image-caption">{escape(university)} • {escape(country)}</div>
+        </div>
+      </div>
+    </div>
+    """
+
+    st.markdown(card_html, unsafe_allow_html=True)
 
 
 def main() -> None:
@@ -271,7 +458,7 @@ def main() -> None:
 
     for idx, (_, row) in enumerate(matches_df.head(top_n).iterrows(), start=1):
         info_row = find_info_row(info_df, row["university"], row["country"])
-        render_result_card(idx, row, info_row)
+        render_result_card(idx, row, info_row, user_input)
         st.divider()
 
 
