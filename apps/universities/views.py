@@ -496,18 +496,158 @@ def build_csv_short_description(university_name, country, csv_info=None):
     if csv_info:
         institution_type = str(csv_info.get('public_private', '')).strip()
         if institution_type and institution_type.upper() != 'N/A':
-            parts.append(f"{university_name} is a {institution_type.lower()} university in {country}.")
+            parts.append(f"{university_name} is a {institution_type.lower()} university in {country} with a strong international profile.")
         else:
-            parts.append(f"{university_name} is located in {country}.")
+            parts.append(f"{university_name} is located in {country} and welcomes students from around the world.")
         highlight = str(csv_info.get('global_ranking', '')).strip()
         if highlight and highlight.upper() != 'N/A':
-            parts.append(f"It currently holds a global ranking of {highlight}.")
+            parts.append(f"It currently holds a global ranking of {highlight}, reflecting its academic reputation.")
         else:
             language = str(csv_info.get('language_of_teaching', '')).strip()
             if language and language.upper() != 'N/A':
-                parts.append(f"Teaching is primarily in {language}.")
+                parts.append(f"Teaching is primarily in {language}, making it accessible for international learners.")
     else:
-        parts.append(f"{university_name} is located in {country}.")
+        parts.append(f"{university_name} is located in {country} and offers a broad mix of programmes.")
+    parts.append("Campus life blends research activity with a diverse student community, creating plenty of academic and cultural opportunities.")
+    return " ".join(parts)
+
+
+def _format_currency(amount):
+    try:
+        value = float(amount)
+    except (TypeError, ValueError):
+        return str(amount)
+    return f"${value:,.0f}"
+
+
+def build_user_input_summary(user_input, user_preferences):
+    note = (user_preferences or '').strip()
+    if note:
+        return note
+
+    parts = []
+
+    selected_countries = [c for c in user_input.get('countries', []) if c]
+    if selected_countries:
+        parts.append(f"Preferred countries: {', '.join(selected_countries)}")
+
+    languages = user_input.get('languages', [])
+    levels = user_input.get('lang_levels', [])
+    if languages:
+        formatted = []
+        for idx, lang in enumerate(languages):
+            level = levels[idx] if idx < len(levels) else None
+            formatted.append(f"{lang} ({level})" if level else lang)
+        parts.append(f"Language readiness: {', '.join(formatted)}")
+
+    user_gpa = user_input.get('gpa')
+    if user_gpa:
+        parts.append(f"GPA: {user_gpa:.2f}")
+
+    user_sat = user_input.get('sat')
+    if user_sat:
+        parts.append(f"SAT: {user_sat}")
+
+    user_ielts = user_input.get('ielts')
+    if user_ielts:
+        parts.append(f"IELTS: {user_ielts:.1f}")
+
+    budget = user_input.get('budget_max')
+    if budget:
+        parts.append(f"Budget: {_format_currency(budget)} per year")
+
+    public_pref = user_input.get('public_preference')
+    if public_pref == 1:
+        parts.append("Prefers public institutions")
+    elif public_pref == 0:
+        parts.append("Prefers private institutions")
+
+    return "; ".join(parts)
+
+
+def generate_preference_paragraph(university, country, user_input, user_preferences):
+    if not ENABLE_LLM_ENRICHMENT or not GEMINI_ENABLED:
+        return None
+
+    summary = build_user_input_summary(user_input, user_preferences)
+    if not summary:
+        return None
+
+    prompt = f"""You are writing a personalised recommendation for a prospective student.
+
+Student profile summary:
+{summary}
+
+Task: Write 3-4 sentences that explain why {university} in {country} could be a good match for this student. Base your response ONLY on the student profile above and reasonable inferences about university life (student communities, clubs, networking, city atmosphere).
+
+Important constraints:
+- Do NOT mention tuition fees, scholarship availability, rankings, acceptance rates, or other metrics.
+- Focus on aligning the student's interests and readiness with possible experiences they could pursue at the university using general knowledge.
+- Keep the tone encouraging and tailored to the student's stated goals.
+"""
+
+    try:
+        model = get_llm_model('gemini-flash-latest')
+        response = model.generate_content(prompt)
+        text = (response.text or '').strip()
+        if text:
+            return text
+    except Exception as e:
+        print(f"Preference paragraph LLM error for {university}: {e}")
+
+    return None
+
+
+def build_user_fit_summary(uni_record, user_input, user_preferences):
+    note = (user_preferences or '').strip()
+    if note:
+        return note
+
+    parts = []
+
+    selected_countries = [c for c in user_input.get('countries', []) if c]
+    uni_country = uni_record.get('country', '')
+    if selected_countries:
+        country_list = ", ".join(selected_countries)
+        if uni_country and uni_country in selected_countries:
+            parts.append(f"You asked for universities in {country_list}, and this option keeps you in {uni_country}.")
+        elif uni_country:
+            parts.append(f"This adds {uni_country} alongside your preferred countries ({country_list}).")
+
+    languages = user_input.get('languages', [])
+    levels = user_input.get('lang_levels', [])
+    if languages:
+        formatted = []
+        for idx, lang in enumerate(languages):
+            level = levels[idx] if idx < len(levels) else None
+            formatted.append(f"{lang} ({level})" if level else lang)
+        parts.append(f"You told us you can study in {', '.join(formatted)}.")
+
+    user_gpa = user_input.get('gpa')
+    if user_gpa:
+        parts.append(f"A GPA of {user_gpa:.2f} showcases strong academics.")
+
+    user_sat = user_input.get('sat')
+    if user_sat:
+        parts.append(f"Your SAT score of {user_sat} highlights solid test readiness.")
+
+    user_ielts = user_input.get('ielts')
+    if user_ielts:
+        parts.append(f"An IELTS score of {user_ielts:.1f} confirms you're comfortable learning in English.")
+
+    budget = user_input.get('budget_max')
+    if budget:
+        parts.append(f"You've planned for roughly {_format_currency(budget)} per year to support your studies.")
+
+    public_pref = user_input.get('public_preference')
+    if public_pref == 1:
+        parts.append("You mentioned a preference for public institutions.")
+    elif public_pref == 0:
+        parts.append("You mentioned a preference for private institutions.")
+
+    if not parts:
+        parts.append(f"{uni_record.get('university')} aligns with the academic profile you shared.")
+
     return " ".join(parts)
 
 
@@ -534,7 +674,7 @@ def get_ai_description(university_name, country, stats, csv_info=None):
         for label, value in field_map.items():
             if value and str(value).strip() and str(value).strip().upper() != 'N/A':
                 data_points.append(f"- {label}: {value}")
-    else:
+                            else:
         # Fall back to the matching stats so the LLM still gets some structure
         fallback_map = {
             'Minimum GPA': stats.get('GPA_min'),
@@ -575,7 +715,7 @@ University data:
                     word_count = len(text.split())
                     if sentence_count >= 5 and word_count >= 140:
                         return text
-                    if attempt < max_retries - 1:
+                        if attempt < max_retries - 1:
                         prompt = f"The previous answer was too short. Rewrite with 6-7 sentences and include concrete facts about {university_name}.\n\nUniversity data:\n{data_block}"
                         continue
                     return text
@@ -592,7 +732,7 @@ University data:
             import traceback
             traceback.print_exc()
             continue
-    
+        
     print(f"WARNING: All LLM models failed for {university_name}. Using fallback description.")
     return build_csv_fallback_description(university_name, country, stats, csv_info)
 
@@ -1008,7 +1148,7 @@ def results(request):
             result = uni_find_wrapper.calculate_match_score(df, user_input)
             
             # Convert to list - include match_score
-            results_list = result[['university', 'country', 'language', 'IELTS_min', 'GPA_min', 'SAT_min', 'international_cost_max', 'match_score']].to_dict(orient='records')
+            results_list = result[['university', 'country', 'language', 'IELTS_min', 'GPA_min', 'SAT_min', 'international_cost_max', 'is_public', 'match_score']].to_dict(orient='records')
             
             print("=" * 80)
             print(f"MATCHING RESULTS: Found {len(results_list)} universities that match criteria")
@@ -1065,7 +1205,8 @@ def results(request):
                     'GPA_min': uni['GPA_min'],
                     'SAT_min': uni['SAT_min'],
                     'IELTS_min': uni['IELTS_min'],
-                    'international_cost_max': uni['international_cost_max']
+                    'international_cost_max': uni['international_cost_max'],
+                    'is_public': uni.get('is_public')
                 }
                 
                 # Get CSV info for additional data
@@ -1106,9 +1247,10 @@ def results(request):
                 uni['public_private'] = csv_info.get('public_private', 'N/A') if csv_info else 'N/A'
                 uni['website'] = csv_info.get('website', 'N/A') if csv_info else 'N/A'
                 
-                # Add preference explanation if we have one from quick selection
-                if uni['university'] in selected_universities_with_explanations:
-                    uni['preference_explanation'] = selected_universities_with_explanations[uni['university']]
+                pref_text = generate_preference_paragraph(uni['university'], uni['country'], user_input, user_preferences)
+                if not pref_text:
+                    pref_text = build_user_fit_summary(uni, user_input, user_preferences)
+                uni['preference_explanation'] = pref_text
                 
                 enriched_results.append(uni)
             

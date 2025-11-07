@@ -163,48 +163,15 @@ def get_university_image_bytes(university: str, country: str) -> bytes:
 
 
 def build_description(university: str, country: str, stats: Dict[str, Any], info_row: Optional[pd.Series]) -> str:
-    sentences: List[str] = []
+    institution_type = "public" if stats.get("is_public") == 1 else "private"
+    tuition = stats.get("international_cost_max")
+    tuition_text = f" around {format_currency(tuition)}" if tuition not in (None, "", "N/A") else ""
 
-    institution_type = str(info_row.get("Public/Private", "")).strip() if info_row is not None else ""
-    global_rank = str(info_row.get("Global ranking", "")).strip() if info_row is not None else ""
-    national_rank = str(info_row.get("National ranking", "")).strip() if info_row is not None else ""
-    acceptance_rate = str(info_row.get("Acceptance rate (%)", "")).strip() if info_row is not None else ""
-    language = str(info_row.get("Language of teaching", "")).strip() if info_row is not None else ""
-    scholarships = str(info_row.get("Scholarship (yes/no)", "")).strip() if info_row is not None else ""
-    student_ratio = str(info_row.get("Student to faculty ratio", "")).strip() if info_row is not None else ""
-    international_cost = str(info_row.get("Cost per year \nfor interational students", "")).strip() if info_row is not None else ""
-
-    intro_clause = "a leading institution"
-    if institution_type:
-        intro_clause = f"a {institution_type.lower()} institution"
-    sentences.append(f"{university} is {intro_clause} based in {country}, welcoming an international cohort of ambitious students each year.")
-
-    if global_rank and global_rank.upper() != "N/A":
-        ranking_sentence = f"It is recognised globally with a ranking of {global_rank}"
-        if national_rank and national_rank.upper() != "N/A":
-            ranking_sentence += f" and stands at {national_rank} within national league tables"
-        ranking_sentence += "."
-        sentences.append(ranking_sentence)
-
-    if acceptance_rate and acceptance_rate.upper() != "N/A":
-        sentences.append(f"Recent admissions data points to an acceptance rate near {acceptance_rate}, signalling an academically driven student body.")
-
-    if language and language.upper() != "N/A":
-        sentences.append(f"Teaching is primarily delivered in {language}, supported by well-resourced faculties and modern learning environments.")
-
-    if scholarships and scholarships.upper() != "N/A":
-        sentences.append("Multiple scholarship routes are available, giving international students additional financial flexibility.")
-
-    if student_ratio and student_ratio.upper() != "N/A":
-        sentences.append(f"A student-to-faculty ratio of {student_ratio} keeps seminars collaborative and mentoring accessible.")
-
-    intl_cost_value = international_cost if international_cost and international_cost.upper() != "N/A" else stats.get("international_cost_max")
-    if intl_cost_value not in (None, "", "N/A"):
-        sentences.append(f"International tuition averages around {format_currency(intl_cost_value)}, helping you plan the annual investment upfront.")
-
-    sentences.append("Beyond academics, the campus blends research hubs, cultural societies, and tailored support services that help newcomers settle quickly.")
-
-    return " ".join(sentences)
+    return (
+        f"{university} is a {institution_type} option in {country}. "
+        "It emphasises an English-speaking academic environment and welcomes international applications. "
+        "Plan for tuition" + tuition_text + "."
+    )
 
 
 def build_preference_explanation(
@@ -215,103 +182,55 @@ def build_preference_explanation(
     user_input: Dict[str, Any],
     stats: Dict[str, Any],
 ) -> str:
-    sentences: List[str] = []
+    user_note = user_input.get("preferences_text", "").strip()
+    if user_note:
+        return user_note
 
-    selected_countries = user_input.get("countries", [])
+    lines: List[str] = []
+
+    selected_countries = [c for c in user_input.get("countries", []) if c]
     if selected_countries:
+        selected = ", ".join(selected_countries)
         if country in selected_countries:
-            if len(selected_countries) == 1:
-                sentences.append(f"You asked for universities in {selected_countries[0]}, and {university} keeps you right in {country}.")
-            else:
-                chosen = ", ".join(selected_countries)
-                sentences.append(f"{university} sits in {country}, one of your preferred study destinations ({chosen}).")
+            lines.append(f"You asked for options in {selected}, and this university keeps you in {country}.")
         else:
-            sentences.append(f"{university} is located in {country}, giving you an additional option beyond your initial list ({', '.join(selected_countries)}).")
+            lines.append(f"This adds {country} alongside your preferred countries ({selected}).")
 
-    language_levels = {}
-    for idx, lang in enumerate(user_input.get("languages", [])):
-        if idx < len(user_input.get("lang_levels", [])):
-            language_levels[lang.lower()] = user_input["lang_levels"][idx]
+    languages = user_input.get("languages", [])
+    levels = user_input.get("lang_levels", [])
+    if languages:
+        formatted_langs = []
+        for idx, lang in enumerate(languages):
+            level = levels[idx] if idx < len(levels) else None
+            formatted_langs.append(f"{lang} ({level})" if level else lang)
+        lines.append(f"You told us you can study in {', '.join(formatted_langs)}.")
 
-    teaching_languages_source = info_row.get("Language of teaching", "") if info_row is not None else row.get("language", "")
-    teaching_languages = [lang.strip().lower() for lang in str(teaching_languages_source).split(",") if lang.strip()]
+    user_gpa = user_input.get("gpa")
+    if user_gpa:
+        lines.append(f"A GPA of {user_gpa:.2f} shows strong academic preparation.")
 
-    # Language fit
-    if teaching_languages:
-        shown_language = None
-        for lang, level in language_levels.items():
-            if lang in teaching_languages:
-                if lang == "english":
-                    required_ielts = to_float(stats.get("IELTS_min"))
-                    if required_ielts is not None and user_input.get("ielts") is not None:
-                        user_ielts = user_input.get("ielts")
-                        if user_ielts >= required_ielts:
-                            sentences.append(
-                                f"Your IELTS {user_ielts:.1f} comfortably meets the {required_ielts:.1f} English requirement for this campus."
-                            )
-                            shown_language = "english"
-                            break
-                else:
-                    sentences.append(
-                        f"You indicated {lang.title()} at level {level}, which matches the teaching language options offered here."
-                    )
-                    shown_language = lang
-                    break
-        if shown_language is None and "english" in teaching_languages:
-            sentences.append("This university teaches in English, so IELTS will be the key requirement when you are ready to apply.")
+    user_sat = user_input.get("sat")
+    if user_sat:
+        lines.append(f"Your SAT score of {user_sat} demonstrates solid test readiness.")
 
-    # Academic profile fit
-    gpa_required = to_float(stats.get("GPA_min"))
-    if gpa_required is not None:
-        user_gpa = user_input.get("gpa")
-        if user_gpa is not None and user_gpa >= gpa_required:
-            sentences.append(f"Your GPA of {user_gpa:.2f} is above the expected {gpa_required:.2f} threshold.")
+    user_ielts = user_input.get("ielts")
+    if user_ielts:
+        lines.append(f"An IELTS score of {user_ielts:.1f} confirms you can learn comfortably in English.")
 
-    sat_required = to_float(stats.get("SAT_min"))
-    if sat_required:
-        user_sat = user_input.get("sat")
-        if user_sat and user_sat >= sat_required:
-            sentences.append(f"A SAT score of {user_sat} exceeds the stated benchmark of {int(sat_required)}.")
-
-    tuition_required = to_float(stats.get("international_cost_max"))
-    if tuition_required is None and info_row is not None:
-        tuition_required = to_float(info_row.get("Cost per year \nfor interational students"))
-    if tuition_required is not None:
-        budget = user_input.get("budget_max")
-        if budget:
-            if budget >= tuition_required:
-                sentences.append(f"The annual cost (~{format_currency(tuition_required)}) stays within your budget of {format_currency(budget)}.")
-            else:
-                sentences.append(
-                    f"Keep in mind the annual cost (~{format_currency(tuition_required)}) is above your stated budget of {format_currency(budget)}."
-                )
+    budget = user_input.get("budget_max")
+    if budget:
+        lines.append(f"You've planned for an annual budget of about {format_currency(budget)} to support your studies.")
 
     public_pref = user_input.get("public_preference")
-    if public_pref in (0, 1):
-        desired_type = "public" if public_pref == 1 else "private"
-        if info_row is not None:
-            actual_type = str(info_row.get("Public/Private", "")).strip().lower()
-        else:
-            public_flag = row.get("is_public")
-            actual_type = "public" if public_flag == 1 else "private" if public_flag == 0 else ""
-        if actual_type:
-            if desired_type in actual_type:
-                sentences.append(f"You preferred {desired_type} institutions, and this university fits that preference.")
-            else:
-                sentences.append(f"This institution is {actual_type}, which differs from your stated preference for {desired_type} options.")
+    if public_pref == 1:
+        lines.append("You mentioned a preference for public institutions.")
+    elif public_pref == 0:
+        lines.append("You mentioned a preference for private institutions.")
 
-    scholarship_info = str(info_row.get("Scholarship (yes/no)", "")).strip().lower() if info_row is not None else ""
-    if scholarship_info == "yes":
-        sentences.append("Scholarship opportunities are available, giving you more flexibility to manage costs.")
+    if not lines:
+        lines.append(f"{university} aligns with the academic profile you shared.")
 
-    preferences_text = user_input.get("preferences_text", "")
-    if preferences_text:
-        sentences.append(f"This aligns with your note: {preferences_text}.")
-
-    if not sentences:
-        sentences.append(f"{university} aligns well with your academic profile and study preferences.")
-
-    return " ".join(sentences)
+    return " ".join(lines)
 
 
 def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd.Series], user_input: Dict[str, Any], llm_meta: Optional[Dict[str, Any]]) -> None:
@@ -324,15 +243,20 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
         "SAT_min": record.get("SAT_min"),
         "IELTS_min": record.get("IELTS_min"),
         "international_cost_max": record.get("international_cost_max"),
+        "is_public": record.get("is_public"),
     }
 
-    preference_text = (llm_meta or {}).get("preference_explanation") or build_preference_explanation(
-        university, country, pd.Series(record), info_row, user_input, stats
-    )
+    preference_text: Optional[str] = None
+    if hasattr(uni_views, "generate_preference_paragraph"):
+        try:
+            preference_text = uni_views.generate_preference_paragraph(university, country, user_input, user_input.get("preferences_text"))
+        except Exception as exc:
+            st.warning(f"Preference paragraph failed for {university}: {exc}")
 
-    pref_note = user_input.get("preferences_text", "").strip()
-    if pref_note and pref_note.lower() not in preference_text.lower():
-        preference_text = f"{preference_text} This reflects your request: {pref_note}."
+    if not preference_text:
+        preference_text = build_preference_explanation(
+            university, country, pd.Series(record), info_row, user_input, stats
+        )
 
     short_description = ""
     if getattr(uni_views, "GEMINI_ENABLED", False):
@@ -344,13 +268,7 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
     if not short_description:
         short_description = build_description(university, country, stats, info_row)
 
-    if getattr(uni_views, "GEMINI_ENABLED", False) and getattr(uni_views, "ENABLE_LLM_ENRICHMENT", True):
-        try:
-            long_description = uni_views.get_ai_description(university, country, stats, info_row)
-        except Exception:
-            long_description = build_description(university, country, stats, info_row)
-    else:
-        long_description = build_description(university, country, stats, info_row)
+    long_description = build_description(university, country, stats, info_row)
 
     image_bytes = get_university_image_bytes(university, country)
 

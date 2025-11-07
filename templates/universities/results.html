@@ -225,27 +225,14 @@
                             <img class="university-image" src="{{ uni.image_url|default:'https://via.placeholder.com/800x600?text=University+Image' }}" alt="{{ uni.university }} image" onerror="this.onerror=null;this.src='https://via.placeholder.com/800x600?text=University+Image';">
                             
                             <div class="rationale-box" style="min-height: 180px;">
-                                <div class="rationale-label">Quick Snapshot</div>
+                                <div class="rationale-label">Short Description</div>
                                 <div class="rationale-text">{{ uni.short_description|default:uni.description }}</div>
                             </div>
                             
                             <div class="rationale-box" style="min-height: 220px;">
                                 <div class="rationale-label">Why This University Fits Your Goals</div>
-                                <div class="rationale-text">
-                                    {% if preferences_used and uni.preference_explanation %}
-                                        {{ uni.preference_explanation }}
-                                    {% else %}
-                                        {{ uni.description }}
-                                    {% endif %}
-                                </div>
+                                <div class="rationale-text">{{ uni.preference_explanation }}</div>
                             </div>
-                            
-                            {% if preferences_used and uni.preference_explanation %}
-                            <div class="rationale-box" style="min-height: 180px;">
-                                <div class="rationale-label">Detailed Overview</div>
-                                <div class="rationale-text">{{ uni.description }}</div>
-                            </div>
-                            {% endif %}
                             
                             {% if uni.website != 'N/A' %}
                             <div class="read-more">
