@@ -674,7 +674,7 @@ def get_ai_description(university_name, country, stats, csv_info=None):
         for label, value in field_map.items():
             if value and str(value).strip() and str(value).strip().upper() != 'N/A':
                 data_points.append(f"- {label}: {value}")
-                            else:
+    else:
         # Fall back to the matching stats so the LLM still gets some structure
         fallback_map = {
             'Minimum GPA': stats.get('GPA_min'),
