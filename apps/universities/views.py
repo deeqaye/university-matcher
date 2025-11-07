@@ -48,6 +48,7 @@ else:
         GEMINI_ENABLED = False
         google_exceptions = None
 
+ENABLE_LLM_ENRICHMENT = GEMINI_ENABLED and getattr(settings, 'ENABLE_LLM_ENRICHMENT', False)
 MAX_LONG_DESCRIPTIONS = getattr(settings, 'MAX_LONG_DESCRIPTIONS', 2)
 
 
@@ -363,6 +364,16 @@ def get_university_info_from_csv(university_name, country):
 
 def get_university_city(university_name, country):
     """Get the city where the university is located using LLM"""
+    if not ENABLE_LLM_ENRICHMENT:
+        name_lower = university_name.lower()
+        if 'london' in name_lower or 'ucl' in name_lower:
+            return "London, UK"
+        if 'cambridge' in name_lower:
+            return "Cambridge, UK"
+        if 'oxford' in name_lower:
+            return "Oxford, UK"
+        return country
+
     if not GEMINI_ENABLED:
         # Try to extract city from CSV first
         csv_info = get_university_info_from_csv(university_name, country)
@@ -478,9 +489,29 @@ def build_csv_fallback_description(university_name, country, stats, csv_info=Non
     return " ".join(parts)
 
 
+def build_csv_short_description(university_name, country, csv_info=None):
+    parts = []
+    if csv_info:
+        institution_type = str(csv_info.get('public_private', '')).strip()
+        if institution_type and institution_type.upper() != 'N/A':
+            parts.append(f"{university_name} is a {institution_type.lower()} university in {country}.")
+        else:
+            parts.append(f"{university_name} is located in {country}.")
+        highlight = str(csv_info.get('global_ranking', '')).strip()
+        if highlight and highlight.upper() != 'N/A':
+            parts.append(f"It currently holds a global ranking of {highlight}.")
+        else:
+            language = str(csv_info.get('language_of_teaching', '')).strip()
+            if language and language.upper() != 'N/A':
+                parts.append(f"Teaching is primarily in {language}.")
+    else:
+        parts.append(f"{university_name} is located in {country}.")
+    return " ".join(parts)
+
+
 def get_ai_description(university_name, country, stats, csv_info=None):
     """Get AI-generated description of the university with quota error handling"""
-    if not GEMINI_ENABLED:
+    if not ENABLE_LLM_ENRICHMENT or not GEMINI_ENABLED:
         return build_csv_fallback_description(university_name, country, stats, csv_info)
     
     # Use provided csv_info or load if not provided
@@ -665,6 +696,8 @@ Write a detailed, rich description that is AT LEAST 10-15 sentences (300-400 wor
 
 def get_short_university_description(university_name, country, csv_info=None):
     """Generate a short, complete university description (2-3 sentences)"""
+    if not ENABLE_LLM_ENRICHMENT or not GEMINI_ENABLED:
+        return build_csv_short_description(university_name, country, csv_info)
     if not GEMINI_ENABLED:
         return f"{university_name} is a university located in {country}."
     
@@ -740,6 +773,8 @@ Your 2-3 sentence description:"""
 
 def select_top_universities_with_llm(enriched_results, user_preferences, user_input):
     """Use LLM to select top-5 universities based on user preferences and other criteria"""
+    if not ENABLE_LLM_ENRICHMENT or not GEMINI_ENABLED:
+        return enriched_results[:5]
     if not GEMINI_ENABLED or not enriched_results:
         # If LLM not available or no results, return first 5
         return enriched_results[:5]
@@ -1087,7 +1122,7 @@ def results(request):
             basic_universities = [{'university': uni['university'], 'country': uni['country'], 'match_score': uni['match_score']} for uni in results_list]
             selected_universities_with_explanations = {}
             
-            if user_preferences and user_preferences.strip() and GEMINI_ENABLED and len(results_list) > 5:
+            if user_preferences and user_preferences.strip() and ENABLE_LLM_ENRICHMENT and len(results_list) > 5:
                 try:
                     print(f"\nSENDING TO LLM: {len(basic_universities)} universities")
                     print(f"User preferences: {user_preferences[:100]}...")
@@ -1116,7 +1151,10 @@ def results(request):
             # Enrich each selected university with AI description, image, and additional data
             enriched_results = []
             try:
-                long_description_limit = max(0, int(MAX_LONG_DESCRIPTIONS))
+                if ENABLE_LLM_ENRICHMENT:
+                    long_description_limit = max(0, int(MAX_LONG_DESCRIPTIONS))
+                else:
+                    long_description_limit = 0
             except (TypeError, ValueError):
                 long_description_limit = 0
             long_description_count = 0
@@ -1175,7 +1213,7 @@ def results(request):
             # Results are already selected and enriched
             return render(request, 'universities/results.html', {
                 'results': enriched_results,
-                'gemini_enabled': GEMINI_ENABLED,
+                'gemini_enabled': ENABLE_LLM_ENRICHMENT,
                 'total_matches': len(results_list),
                 'preferences_used': bool(user_preferences)
             })
