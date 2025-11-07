@@ -6,27 +6,36 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import os
 import pandas as pd
 import streamlit as st
 from urllib.parse import quote
 import re
 import base64
-from html import escape
+import requests
+import django
 
 # Ensure the Django project modules are importable
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "university_matcher.settings")
+django.setup()
+
 from apps.universities.uni_find import (  # type: ignore  # pylint: disable=import-error
     calculate_match_score,
     preprocess_university_data,
 )
+from apps.universities import views as uni_views  # type: ignore  # pylint: disable=import-error
 
 
 st.set_page_config(page_title="University Matcher", layout="wide")
 
 STATIC_IMAGE_DIR = BASE_DIR / "static" / "images" / "universities"
+PLACEHOLDER_IMAGE_BYTES = base64.b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGD4DwABAgEAffZciQAAAABJRU5ErkJggg=="
+)
 
 st.markdown(
     """
@@ -123,54 +132,74 @@ def format_currency(value) -> str:
     return f"${amount:,.0f}"
 
 
-def build_description(university: str, country: str, stats: Dict[str, str], info_row: Optional[pd.Series]) -> str:
-    parts: List[str] = []
+@st.cache_data(show_spinner=False)
+def get_university_image_bytes(university: str, country: str) -> bytes:
+    safe_name = re.sub(r"[^\w\s-]", "", university.lower())
+    safe_name = re.sub(r"[-\s]+", "-", safe_name)
 
-    if info_row is not None:
-        institution_type = str(info_row.get("Public/Private", "")).strip()
-        if institution_type:
-            parts.append(f"{university} is a {institution_type.lower()} institution located in {country}.")
-        else:
-            parts.append(f"{university} is located in {country} and welcomes international students.")
+    for extension in (".jpg", ".jpeg", ".png"):
+        static_path = STATIC_IMAGE_DIR / f"{safe_name}{extension}"
+        if static_path.exists():
+            try:
+                return static_path.read_bytes()
+            except Exception:
+                continue
 
-        global_rank = str(info_row.get("Global ranking", "")).strip()
-        if global_rank and global_rank.upper() != "N/A":
-            parts.append(f"It currently holds a global ranking of {global_rank}.")
+    query = quote(f"{university} {country} campus")
+    unsplash_url = f"https://source.unsplash.com/900x600/?{query}"
+    try:
+        response = requests.get(unsplash_url, timeout=10)
+        if response.status_code == 200 and response.content:
+            return response.content
+    except Exception:
+        pass
 
-        acceptance_rate = str(info_row.get("Acceptance rate (%)", "")).strip()
-        if acceptance_rate and acceptance_rate.upper() != "N/A":
-            parts.append(f"Recent acceptance rates hover around {acceptance_rate}.")
+    return PLACEHOLDER_IMAGE_BYTES
 
-        language = str(info_row.get("Language of teaching", "")).strip()
-        if language and language.upper() != "N/A":
-            parts.append(f"Courses are primarily taught in {language}.")
 
-        scholarships = str(info_row.get("Scholarship (yes/no)", "")).strip()
-        if scholarships and scholarships.upper() != "N/A":
-            parts.append(f"Scholarships are {scholarships} for qualified applicants.")
+def build_description(university: str, country: str, stats: Dict[str, Any], info_row: Optional[pd.Series]) -> str:
+    sentences: List[str] = []
 
-        cost_international = str(info_row.get("Cost per year \nfor interational students", "")).strip()
-        if cost_international and cost_international.upper() != "N/A":
-            parts.append(f"Estimated annual cost for international students is {cost_international}.")
-    else:
-        parts.append(f"{university} is located in {country} and provides a welcoming environment for global learners.")
+    institution_type = str(info_row.get("Public/Private", "")).strip() if info_row is not None else ""
+    global_rank = str(info_row.get("Global ranking", "")).strip() if info_row is not None else ""
+    national_rank = str(info_row.get("National ranking", "")).strip() if info_row is not None else ""
+    acceptance_rate = str(info_row.get("Acceptance rate (%)", "")).strip() if info_row is not None else ""
+    language = str(info_row.get("Language of teaching", "")).strip() if info_row is not None else ""
+    scholarships = str(info_row.get("Scholarship (yes/no)", "")).strip() if info_row is not None else ""
+    student_ratio = str(info_row.get("Student to faculty ratio", "")).strip() if info_row is not None else ""
+    international_cost = str(info_row.get("Cost per year \nfor interational students", "")).strip() if info_row is not None else ""
 
-    admission_bits: List[str] = []
-    gpa_min = stats.get("GPA_min")
-    sat_min = stats.get("SAT_min")
-    ielts_min = stats.get("IELTS_min")
+    intro_clause = "a leading institution"
+    if institution_type:
+        intro_clause = f"a {institution_type.lower()} institution"
+    sentences.append(f"{university} is {intro_clause} based in {country}, welcoming an international cohort of ambitious students each year.")
 
-    if gpa_min not in (None, "N/A", 0):
-        admission_bits.append(f"GPA {gpa_min}+")
-    if sat_min not in (None, "N/A", 0):
-        admission_bits.append(f"SAT {sat_min}+")
-    if ielts_min not in (None, "N/A", 0):
-        admission_bits.append(f"IELTS {ielts_min}+")
+    if global_rank and global_rank.upper() != "N/A":
+        ranking_sentence = f"It is recognised globally with a ranking of {global_rank}"
+        if national_rank and national_rank.upper() != "N/A":
+            ranking_sentence += f" and stands at {national_rank} within national league tables"
+        ranking_sentence += "."
+        sentences.append(ranking_sentence)
 
-    if admission_bits:
-        parts.append("Admissions typically expect " + ", ".join(admission_bits) + ".")
+    if acceptance_rate and acceptance_rate.upper() != "N/A":
+        sentences.append(f"Recent admissions data points to an acceptance rate near {acceptance_rate}, signalling an academically driven student body.")
 
-    return " ".join(parts)
+    if language and language.upper() != "N/A":
+        sentences.append(f"Teaching is primarily delivered in {language}, supported by well-resourced faculties and modern learning environments.")
+
+    if scholarships and scholarships.upper() != "N/A":
+        sentences.append("Multiple scholarship routes are available, giving international students additional financial flexibility.")
+
+    if student_ratio and student_ratio.upper() != "N/A":
+        sentences.append(f"A student-to-faculty ratio of {student_ratio} keeps seminars collaborative and mentoring accessible.")
+
+    intl_cost_value = international_cost if international_cost and international_cost.upper() != "N/A" else stats.get("international_cost_max")
+    if intl_cost_value not in (None, "", "N/A"):
+        sentences.append(f"International tuition averages around {format_currency(intl_cost_value)}, helping you plan the annual investment upfront.")
+
+    sentences.append("Beyond academics, the campus blends research hubs, cultural societies, and tailored support services that help newcomers settle quickly.")
+
+    return " ".join(sentences)
 
 
 def build_preference_explanation(
@@ -276,49 +305,45 @@ def build_preference_explanation(
     return " ".join(sentences)
 
 
-def get_university_image(university: str, country: str) -> str:
-    safe_name = re.sub(r"[^\w\s-]", "", university.lower())
-    safe_name = re.sub(r"[-\s]+", "-", safe_name)
-    for extension in (".jpg", ".jpeg", ".png"):
-        static_path = STATIC_IMAGE_DIR / f"{safe_name}{extension}"
-        if static_path.exists():
-            try:
-                with static_path.open("rb") as img_file:
-                    encoded = base64.b64encode(img_file.read()).decode("utf-8")
-                mime = "image/png" if extension == ".png" else "image/jpeg"
-                return f"data:{mime};base64,{encoded}"
-            except Exception:
-                pass
-    query = quote(f"{university} {country} campus")
-    return f"https://source.unsplash.com/800x600/?{query}"
-
-
-def render_result_card(index: int, row: pd.Series, info_row: Optional[pd.Series], user_input: Dict[str, Any]) -> None:
-    university = row["university"]
-    country = row["country"]
-    match_score = int(row.get("match_score", 0))
+def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd.Series], user_input: Dict[str, Any], llm_meta: Optional[Dict[str, Any]]) -> None:
+    university = record["university"]
+    country = record["country"]
+    match_score = int(record.get("match_score", 0))
 
     stats = {
-        "GPA_min": row.get("GPA_min"),
-        "SAT_min": row.get("SAT_min"),
-        "IELTS_min": row.get("IELTS_min"),
-        "international_cost_max": row.get("international_cost_max"),
+        "GPA_min": record.get("GPA_min"),
+        "SAT_min": record.get("SAT_min"),
+        "IELTS_min": record.get("IELTS_min"),
+        "international_cost_max": record.get("international_cost_max"),
     }
 
-    preference_text = build_preference_explanation(university, country, row, info_row, user_input, stats)
-    description = build_description(university, country, stats, info_row)
-    image_src = get_university_image(university, country)
-
-    teaching_languages_source = info_row.get("Language of teaching", "") if info_row is not None else row.get("language", "")
-    language_pills = "".join(
-        f"<span class='fact-pill'>{escape(lang.strip())}</span>"
-        for lang in str(teaching_languages_source).split(",")
-        if lang.strip()
+    preference_text = (llm_meta or {}).get("preference_explanation") or build_preference_explanation(
+        university, country, pd.Series(record), info_row, user_input, stats
     )
 
-    quick_facts: List[tuple[str, str]] = []
+    short_description = ""
+    if getattr(uni_views, "GEMINI_ENABLED", False):
+        try:
+            short_description = uni_views.get_short_university_description(university, country, info_row)
+        except Exception:
+            short_description = ""
+
+    if not short_description:
+        short_description = build_description(university, country, stats, info_row)
+
+    if getattr(uni_views, "GEMINI_ENABLED", False) and getattr(uni_views, "ENABLE_LLM_ENRICHMENT", True):
+        try:
+            long_description = uni_views.get_ai_description(university, country, stats, info_row)
+        except Exception:
+            long_description = build_description(university, country, stats, info_row)
+    else:
+        long_description = build_description(university, country, stats, info_row)
+
+    image_bytes = get_university_image_bytes(university, country)
+
+    fact_items: List[tuple[str, str]] = []
     if info_row is not None:
-        quick_facts.extend(
+        fact_items.extend(
             [
                 ("Acceptance rate", str(info_row.get("Acceptance rate (%)", "N/A"))),
                 ("Global ranking", str(info_row.get("Global ranking", "N/A"))),
@@ -328,53 +353,45 @@ def render_result_card(index: int, row: pd.Series, info_row: Optional[pd.Series]
             ]
         )
 
-    quick_facts.extend(
+    fact_items.extend(
         [
-            ("Minimum GPA", f"{row.get('GPA_min', 'N/A')}") if row.get("GPA_min") not in (None, "") else ("Minimum GPA", "N/A"),
-            ("Minimum IELTS", f"{row.get('IELTS_min', 'N/A')}") if row.get("IELTS_min") not in (None, "") else ("Minimum IELTS", "N/A"),
-            ("Minimum SAT", f"{row.get('SAT_min', 'N/A')}") if row.get("SAT_min") not in (None, "") else ("Minimum SAT", "N/A"),
-            ("Annual tuition (international)", format_currency(row.get("international_cost_max"))),
+            ("Teaching languages", str(info_row.get("Language of teaching", "N/A")) if info_row is not None else str(record.get("language", "N/A"))),
+            ("Minimum GPA", record.get("GPA_min", "N/A")),
+            ("Minimum IELTS", record.get("IELTS_min", "N/A")),
+            ("Minimum SAT", record.get("SAT_min", "N/A")),
+            ("Annual tuition (international)", format_currency(record.get("international_cost_max"))),
         ]
     )
 
-    valid_facts = [(label, value) for label, value in quick_facts if value not in (None, "", "N/A")]
+    fact_items = [(label, value) for label, value in fact_items if value not in (None, "", "N/A")]
 
-    facts_html = ""
-    if valid_facts:
-        facts_html = "<ul>" + "".join(
-            f"<li><strong>{escape(label)}:</strong> {escape(str(value))}</li>" for label, value in valid_facts
-        ) + "</ul>"
-
-    website_html = ""
+    website = ""
     if info_row is not None:
         website = str(info_row.get("Link to official website", "")).strip()
-        if website:
-            website_html = f"<p><a href='{escape(website)}' target='_blank'>Visit official site ↗</a></p>"
 
-    card_html = f"""
-    <div class="match-card">
-      <h3>#{index} {escape(university)}</h3>
-      <div class="match-meta">{escape(country)} • Match score {match_score} / 100</div>
-      <div style="display:flex;flex-wrap:wrap;gap:1.75rem;align-items:flex-start;">
-        <div style="flex:1 1 360px;min-width:280px;">
-          <div class="preference-text">{escape(preference_text)}</div>
-          {language_pills}
-          {facts_html}
-          <details>
-            <summary>Full overview</summary>
-            <p>{escape(description)}</p>
-          </details>
-          {website_html}
-        </div>
-        <div style="flex:1 1 280px;min-width:240px;">
-          <img src="{image_src}" style="width:100%;border-radius:16px;object-fit:cover;max-height:340px;" alt="{escape(university)} campus image" />
-          <div class="image-caption">{escape(university)} • {escape(country)}</div>
-        </div>
-      </div>
-    </div>
-    """
+    with st.container(border=True):
+        st.markdown(f"### #{index} {university}")
+        st.markdown(f"**Match score:** {match_score} / 100")
 
-    st.markdown(card_html, unsafe_allow_html=True)
+        col_text, col_image = st.columns([1.8, 1], gap="large")
+
+        with col_text:
+            st.write(preference_text)
+            st.markdown(f"_Summary_: {short_description}")
+
+            if fact_items:
+                st.markdown("**Key facts**")
+                for label, value in fact_items:
+                    st.markdown(f"• **{label}:** {value}")
+
+            with st.expander("Comprehensive overview"):
+                st.write(long_description)
+
+            if website:
+                st.markdown(f"[Visit official site ↗]({website})")
+
+        with col_image:
+            st.image(image_bytes, caption=f"{university} • {country}", use_column_width=True)
 
 
 def main() -> None:
@@ -422,6 +439,12 @@ def main() -> None:
         public_preference_label = st.selectbox("Institution type preference", ["No preference", "Public", "Private"])
         public_preference = {"No preference": -1, "Public": 1, "Private": 0}[public_preference_label]
 
+        user_preferences = st.text_area(
+            "Describe your ideal university experience (optional)",
+            placeholder="Share preferences like campus vibe, research focus, city type, extracurriculars...",
+            height=120,
+        )
+
         top_n = st.slider("How many matches should we show?", min_value=1, max_value=10, value=5)
         submitted = st.button("Find universities", use_container_width=True)
 
@@ -456,9 +479,25 @@ def main() -> None:
 
     st.success(f"Found {len(matches_df)} matching universities. Showing top {top_n} results.")
 
-    for idx, (_, row) in enumerate(matches_df.head(top_n).iterrows(), start=1):
-        info_row = find_info_row(info_df, row["university"], row["country"])
-        render_result_card(idx, row, info_row, user_input)
+    matches_records = matches_df.to_dict("records")
+    selected_records = matches_records[:top_n]
+    llm_meta_map: Dict[str, Dict[str, Any]] = {}
+
+    if user_preferences and getattr(uni_views, "GEMINI_ENABLED", False):
+        try:
+            llm_selected = uni_views.select_top_universities_with_llm(matches_records, user_preferences, user_input)
+            if llm_selected:
+                llm_meta_map = {item["university"]: item for item in llm_selected}
+                ordered_names = [item["university"] for item in llm_selected]
+                selected_records = [rec for rec in matches_records if rec["university"] in ordered_names]
+                selected_records = sorted(selected_records, key=lambda rec: ordered_names.index(rec["university"]))
+                selected_records = selected_records[:top_n]
+        except Exception as exc:
+            st.warning(f"LLM prioritisation failed: {exc}")
+
+    for idx, record in enumerate(selected_records, start=1):
+        info_row = find_info_row(info_df, record["university"], record["country"])
+        render_result_card(idx, record, info_row, user_input, llm_meta_map.get(record["university"]))
         st.divider()
 
 
