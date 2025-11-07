@@ -151,6 +151,11 @@
                             <div class="university-number">#{{ forloop.counter }} {{ uni.university }}</div>
                             
                             <div class="detail-item">
+                                <span class="detail-label">Match Score</span>
+                                <span class="detail-value">{{ uni.match_score }} / 100</span>
+                            </div>
+                            
+                            <div class="detail-item">
                                 <span class="detail-label">Location</span>
                                 <span class="detail-value">{{ uni.city }}</span>
                             </div>
@@ -217,11 +222,16 @@
                         </div>
                         
                         <div class="visual-section">
-                            <img class="university-image" src="{{ uni.image_url }}" alt="{{ uni.university }} image" onerror="this.onerror=null;this.src='https://via.placeholder.com/800x600?text=University+Image';">
+                            <img class="university-image" src="{{ uni.image_url|default:'https://via.placeholder.com/800x600?text=University+Image' }}" alt="{{ uni.university }} image" onerror="this.onerror=null;this.src='https://via.placeholder.com/800x600?text=University+Image';">
                             
                             <div class="rationale-box" style="min-height: 180px;">
-                                <div class="rationale-label">University Overview</div>
+                                <div class="rationale-label">Quick Snapshot</div>
                                 <div class="rationale-text">{{ uni.short_description|default:uni.description }}</div>
+                            </div>
+                            
+                            <div class="rationale-box" style="min-height: 220px;">
+                                <div class="rationale-label">In-Depth Overview</div>
+                                <div class="rationale-text">{{ uni.description }}</div>
                             </div>
                             
                             {% if preferences_used and uni.preference_explanation %}

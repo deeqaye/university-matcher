@@ -194,9 +194,11 @@ def get_university_image(university_name, country):
     if cache_path.exists():
         return static_url
     
-    # If not cached, return placeholder
-    # Run download_university_images.py to pre-download all images
-    return "https://via.placeholder.com/800x600?text=University+Image"
+    # If not cached, fall back to a themed Unsplash image before using a placeholder
+    query = quote(f"{university_name} {country} campus")
+    unsplash_url = f"https://source.unsplash.com/800x600/?{query}"
+    return unsplash_url
+
 
 def get_university_info_from_csv(university_name, country):
     """Load info.csv and find matching university data with improved matching"""
