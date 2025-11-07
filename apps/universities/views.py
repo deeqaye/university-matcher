@@ -3,6 +3,7 @@ from django.http import HttpResponse
 import pandas as pd
 from django.conf import settings
 from pathlib import Path
+from functools import lru_cache
 from . import uni_find_wrapper
 import requests
 from bs4 import BeautifulSoup
@@ -46,6 +47,32 @@ else:
         print("WARNING: google.generativeai not installed")
         GEMINI_ENABLED = False
         google_exceptions = None
+
+MAX_LONG_DESCRIPTIONS = getattr(settings, 'MAX_LONG_DESCRIPTIONS', 2)
+
+
+@lru_cache(maxsize=1)
+def _load_info_csv():
+    """Load info.csv once per worker and cache it to reduce memory churn."""
+    possible_paths = [
+        Path(settings.BASE_DIR) / 'info.csv',
+        Path(settings.BASE_DIR).parent / 'info.csv',
+        Path(settings.BASE_DIR).parent.parent / 'info.csv',
+    ]
+
+    for path in possible_paths:
+        if path.exists():
+            try:
+                info_df = pd.read_csv(path)
+                print(f"INFO: Loaded info.csv from {path}")
+                return info_df
+            except Exception as e:
+                print(f"ERROR loading info.csv from {path}: {e}")
+                return None
+
+    print("INFO: info.csv not found in known locations; continuing without it.")
+    return None
+
 
 # Helper function to call OpenRouter API with retry logic
 def call_openrouter_api(prompt, model="google/gemini-2.0-flash-exp:free", max_retries=3):
@@ -173,24 +200,10 @@ def get_university_image(university_name, country):
 def get_university_info_from_csv(university_name, country):
     """Load info.csv and find matching university data with improved matching"""
     try:
-        # Try multiple paths for info.csv
-        possible_paths = [
-            Path(settings.BASE_DIR) / 'info.csv',
-            Path(settings.BASE_DIR).parent / 'info.csv',
-            Path(settings.BASE_DIR).parent.parent / 'info.csv',
-        ]
-        
-        info_csv_path = None
-        for path in possible_paths:
-            if path.exists():
-                info_csv_path = path
-                break
-        
-        if not info_csv_path:
+        info_df = _load_info_csv()
+        if info_df is None:
             # info.csv is optional - return None to use data.csv only
             return None
-        
-        info_df = pd.read_csv(info_csv_path)
         
         # Normalize names for better matching
         def normalize_name(name):
@@ -405,10 +418,70 @@ Do not include any other text, explanations, or punctuation beyond the format "C
     
     return f"{country}"  # Final fallback
 
+
+def build_csv_fallback_description(university_name, country, stats, csv_info=None):
+    """Construct a lightweight description using CSV and match data."""
+    parts = []
+
+    institution_type = None
+    if csv_info:
+        raw_type = str(csv_info.get('public_private', '')).strip()
+        if raw_type and raw_type.upper() != 'N/A':
+            institution_type = raw_type.lower()
+
+    if institution_type:
+        parts.append(f"{university_name} is a {institution_type} institution located in {country}.")
+    else:
+        parts.append(f"{university_name} is located in {country}.")
+
+    if csv_info:
+        global_rank = str(csv_info.get('global_ranking', '')).strip()
+        if global_rank and global_rank.upper() != 'N/A':
+            parts.append(f"It holds a global ranking of {global_rank}.")
+
+        acceptance = str(csv_info.get('acceptance_rate', '')).strip()
+        if acceptance and acceptance.upper() != 'N/A':
+            parts.append(f"Recent acceptance rates hover around {acceptance}.")
+
+        scholarship = str(csv_info.get('scholarship', '')).strip()
+        if scholarship and scholarship.upper() != 'N/A':
+            parts.append(f"Scholarships are {scholarship} for qualified applicants.")
+
+        language = str(csv_info.get('language_of_teaching', '')).strip()
+        if language and language.upper() != 'N/A':
+            parts.append(f"Programs are taught primarily in {language}.")
+
+        international_cost = str(csv_info.get('cost_international', '')).strip()
+        if international_cost and international_cost.upper() != 'N/A':
+            parts.append(f"Estimated annual cost for international students is {international_cost}.")
+    elif stats:
+        cost = stats.get('international_cost_max')
+        if cost not in (None, 'N/A', 0):
+            parts.append(f"Estimated annual cost for international students is ${cost}.")
+
+    if stats:
+        gpa = stats.get('GPA_min')
+        sat = stats.get('SAT_min')
+        ielts = stats.get('IELTS_min')
+
+        admission_bits = []
+        if gpa not in (None, 'N/A', 0):
+            admission_bits.append(f"GPA {gpa}+")
+        if sat not in (None, 'N/A', 0):
+            admission_bits.append(f"SAT {sat}+")
+        if ielts not in (None, 'N/A', 0):
+            admission_bits.append(f"IELTS {ielts}+")
+
+        if admission_bits:
+            parts.append("Admissions typically expect " + ', '.join(admission_bits) + ".")
+
+    return " ".join(parts)
+
+
 def get_ai_description(university_name, country, stats, csv_info=None):
     """Get AI-generated description of the university with quota error handling"""
     if not GEMINI_ENABLED:
-        return f"{university_name} in {country} offers strong academics and diverse programs."
+        return build_csv_fallback_description(university_name, country, stats, csv_info)
     
     # Use provided csv_info or load if not provided
     if csv_info is None:
@@ -576,42 +649,19 @@ Write a detailed, rich description that is AT LEAST 10-15 sentences (300-400 wor
         
         # If all models failed, return a fallback
         print(f"WARNING: All LLM models failed for {university_name}. Using fallback description.")
-        if csv_info:
-            # Create a better fallback using CSV data
-            fallback = f"{university_name} is a {csv_info.get('public_private', 'prestigious')} institution located in {country}. "
-            if csv_info.get('global_ranking') != 'N/A':
-                fallback += f"It is ranked {csv_info.get('global_ranking')} globally. "
-            if csv_info.get('acceptance_rate') != 'N/A':
-                fallback += f"The acceptance rate is {csv_info.get('acceptance_rate')}. "
-            if csv_info.get('scholarship') != 'N/A':
-                fallback += f"Scholarships are {csv_info.get('scholarship')}. "
-            fallback += f"The institution offers programs taught in {csv_info.get('language_of_teaching', 'English')}."
-            return fallback
-        
-        return f"{university_name} is a prestigious institution in {country} offering world-class education and diverse programs."
+        return build_csv_fallback_description(university_name, country, stats, csv_info)
     except Exception as quota_error:
         # Check if it's a ResourceExhausted error
         if google_exceptions and isinstance(quota_error, google_exceptions.ResourceExhausted):
             # Quota exceeded - return informative fallback
             print(f"QUOTA EXCEEDED: Cannot generate AI description for {university_name}. Free tier limit reached.")
             print("SOLUTION: Upgrade to a paid Google Cloud account or wait for quota reset (typically daily).")
-            if csv_info:
-                # Create fallback using CSV data
-                fallback = f"{university_name} is a {csv_info.get('public_private', 'prestigious')} institution located in {country}. "
-                if csv_info.get('global_ranking') != 'N/A':
-                    fallback += f"It is ranked {csv_info.get('global_ranking')} globally. "
-                if csv_info.get('acceptance_rate') != 'N/A':
-                    fallback += f"The acceptance rate is {csv_info.get('acceptance_rate')}. "
-                if csv_info.get('scholarship') != 'N/A':
-                    fallback += f"Scholarships are {csv_info.get('scholarship')}. "
-                fallback += f"The institution offers programs taught in {csv_info.get('language_of_teaching', 'English')}."
-                return fallback
-            return f"{university_name} is located in {country} and provides quality education to international students."
+            return build_csv_fallback_description(university_name, country, stats, csv_info)
     except Exception as e:
         print(f"ERROR getting AI description for {university_name}: {e}")
         import traceback
         traceback.print_exc()
-        return f"{university_name} is located in {country} and provides quality education to international students."
+        return build_csv_fallback_description(university_name, country, stats, csv_info)
 
 def get_short_university_description(university_name, country, csv_info=None):
     """Generate a short, complete university description (2-3 sentences)"""
@@ -1065,6 +1115,11 @@ def results(request):
             
             # Enrich each selected university with AI description, image, and additional data
             enriched_results = []
+            try:
+                long_description_limit = max(0, int(MAX_LONG_DESCRIPTIONS))
+            except (TypeError, ValueError):
+                long_description_limit = 0
+            long_description_count = 0
             for uni in universities_to_enrich:
                 stats = {
                     'GPA_min': uni['GPA_min'],
@@ -1093,7 +1148,12 @@ def results(request):
                     uni['tuition_local'] = 'N/A'
                 
                 # Add all required fields
-                uni['description'] = get_ai_description(uni['university'], uni['country'], stats, csv_info)
+                use_long_description = GEMINI_ENABLED and long_description_count < long_description_limit
+                if use_long_description:
+                    uni['description'] = get_ai_description(uni['university'], uni['country'], stats, csv_info)
+                    long_description_count += 1
+                else:
+                    uni['description'] = build_csv_fallback_description(uni['university'], uni['country'], stats, csv_info)
                 uni['short_description'] = get_short_university_description(uni['university'], uni['country'], csv_info)
                 uni['image_url'] = get_university_image(uni['university'], uni['country'])
                 uni['city'] = get_university_city(uni['university'], uni['country'])
