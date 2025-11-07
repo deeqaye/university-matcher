@@ -674,17 +674,16 @@ def get_ai_description(university_name, country, stats, csv_info=None):
         for label, value in field_map.items():
             if value and str(value).strip() and str(value).strip().upper() != 'N/A':
                 data_points.append(f"- {label}: {value}")
-    else:
-        # Fall back to the matching stats so the LLM still gets some structure
-        fallback_map = {
-            'Minimum GPA': stats.get('GPA_min'),
-            'Minimum SAT': stats.get('SAT_min'),
-            'Minimum IELTS': stats.get('IELTS_min'),
-            'International tuition (estimate)': stats.get('international_cost_max'),
-        }
-        for label, value in fallback_map.items():
-            if value not in (None, 'N/A', 0):
-                data_points.append(f"- {label}: {value}")
+            else:
+                fallback_map = {
+                    'Minimum GPA': stats.get('GPA_min'),
+                    'Minimum SAT': stats.get('SAT_min'),
+                    'Minimum IELTS': stats.get('IELTS_min'),
+                    'International tuition (estimate)': stats.get('international_cost_max'),
+                }
+                for label, value in fallback_map.items():
+                    if value not in (None, 'N/A', 0):
+                        data_points.append(f"- {label}: {value}")
     
     data_block = "\n".join(data_points) if data_points else "- No structured data available"
     prompt = f"""Write a polished overview of {university_name} in {country} for prospective international students.
