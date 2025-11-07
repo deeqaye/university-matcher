@@ -48,7 +48,7 @@ else:
         GEMINI_ENABLED = False
         google_exceptions = None
 
-ENABLE_LLM_ENRICHMENT = GEMINI_ENABLED and getattr(settings, 'ENABLE_LLM_ENRICHMENT', False)
+ENABLE_LLM_ENRICHMENT = GEMINI_ENABLED and getattr(settings, 'ENABLE_LLM_ENRICHMENT', True)
 MAX_LONG_DESCRIPTIONS = getattr(settings, 'MAX_LONG_DESCRIPTIONS', 2)
 
 
@@ -518,181 +518,81 @@ def get_ai_description(university_name, country, stats, csv_info=None):
     if csv_info is None:
         csv_info = get_university_info_from_csv(university_name, country)
     
-    try:
-        # Use flash model first (cheaper, higher quotas) then pro model
-        model_names = ['gemini-flash-latest', 'gemini-2.5-pro']
-        
-        for model_name in model_names:
-            try:
-                model = get_llm_model(model_name)
-                
-                # Build the prompt with comprehensive CSV data if available
-                csv_context = ""
-                if csv_info:
-                    csv_context = f"""
+    data_points = []
+    if csv_info:
+        field_map = {
+            'Acceptance rate': csv_info.get('acceptance_rate', 'N/A'),
+            'Global ranking': csv_info.get('global_ranking', 'N/A'),
+            'National ranking': csv_info.get('national_ranking', 'N/A'),
+            'Scholarships': csv_info.get('scholarship', 'N/A'),
+            'Language of teaching': csv_info.get('language_of_teaching', 'N/A'),
+            'Student-faculty ratio': csv_info.get('student_faculty_ratio', 'N/A'),
+            'International tuition': csv_info.get('cost_international', stats.get('international_cost_max', 'N/A')),
+        }
+        for label, value in field_map.items():
+            if value and str(value).strip() and str(value).strip().upper() != 'N/A':
+                data_points.append(f"- {label}: {value}")
+    else:
+        # Fall back to the matching stats so the LLM still gets some structure
+        fallback_map = {
+            'Minimum GPA': stats.get('GPA_min'),
+            'Minimum SAT': stats.get('SAT_min'),
+            'Minimum IELTS': stats.get('IELTS_min'),
+            'International tuition (estimate)': stats.get('international_cost_max'),
+        }
+        for label, value in fallback_map.items():
+            if value not in (None, 'N/A', 0):
+                data_points.append(f"- {label}: {value}")
+    
+    data_block = "\n".join(data_points) if data_points else "- No structured data available"
+    prompt = f"""Write a polished overview of {university_name} in {country} for prospective international students.
 
-COMPREHENSIVE UNIVERSITY INFORMATION FROM DATABASE (Use ALL of this information):
-- Language of Teaching: {csv_info.get('language_of_teaching', 'N/A')}
-- Minimum IELTS Score: {csv_info.get('ielts_min', stats.get('IELTS_min', 'N/A'))}
-- Minimum GPA: {csv_info.get('gpa_min', stats.get('GPA_min', 'N/A'))}
-- Minimum SAT Score: {csv_info.get('sat_min', stats.get('SAT_min', 'N/A'))}
-- Acceptance Rate: {csv_info.get('acceptance_rate', 'N/A')}
-- National Ranking: {csv_info.get('national_ranking', 'N/A')}
-- Global Ranking: {csv_info.get('global_ranking', 'N/A')}
-- Scholarships Available: {csv_info.get('scholarship', 'N/A')}
-- Institution Type: {csv_info.get('public_private', 'N/A')}
-- Student to Faculty Ratio: {csv_info.get('student_faculty_ratio', 'N/A')}
-- International Student Cost: {csv_info.get('cost_international', stats.get('international_cost_max', 'N/A'))}
-- Local Student Cost: {csv_info.get('cost_local', 'N/A')}
-- Official Website: {csv_info.get('website', 'N/A')}
+Guidelines:
+- Produce a single paragraph of roughly 6-7 sentences (about 180-220 words).
+- Cover the university's history or founding context, leading academic or research strengths, notable rankings or achievements, student experience/campus life, and international student support (tuition costs, scholarships, language of instruction).
+- Blend trusted public knowledge with the structured data points listed below.
+- Keep the tone informative and engaging without marketing fluff.
+
+University data:
+{data_block}
 """
-                
-                prompt = f"""Research and write a comprehensive, detailed description about {university_name} in {country}. 
-
-CRITICAL INSTRUCTION: You MUST research this university online using available sources (Wikipedia, university websites, educational databases, news articles) to gather substantial information. Then combine this online research with the database information provided below to create a rich, informative description.
-
-LENGTH REQUIREMENT: The description MUST be at least 8-12 sentences (approximately 250-350 words). This should be a substantial, detailed description, not a brief summary.
-
-RESEARCH REQUIREMENTS:
-- Search online for information about {university_name} in {country}
-- Look up: history, founding year, notable alumni, famous programs, research achievements, campus facilities, international partnerships, student life, location advantages
-- Use Wikipedia, university official websites, educational ranking sites, and other credible sources
-- Gather specific facts, dates, names, and concrete details from online sources
-
-STRUCTURE: Follow this structure for consistency:
-1. Opening (2 sentences): Introduce the university with its location, founding year (if available), and historical significance. Mention its reputation and ranking position (use specific numbers from both online sources and database).
-2. Academic Excellence (2-3 sentences): Discuss notable programs, academic strengths, research areas, famous departments, or areas of excellence. Include specific program names, research centers, or academic achievements found online.
-3. Rankings and Reputation (1-2 sentences): Mention national and global rankings, accreditation, and academic reputation. Combine online research with database rankings.
-4. Campus and Facilities (1-2 sentences): Describe unique features such as campus culture, facilities, student life, location benefits, or institutional characteristics. Use online information about campus life.
-5. International Appeal (1-2 sentences): Highlight what makes it attractive to international students - mention scholarships, language of instruction, acceptance rate, international programs, diverse student body.
-6. Academic Environment (1-2 sentences): Discuss the academic environment, admission competitiveness, student-faculty ratio, class sizes, teaching approach.
-7. Additional Notable Facts (1-2 sentences): Add distinctive characteristics, notable alumni, achievements, partnerships, or other unique aspects found in your research.
-
-University Admission Requirements (from matching database):
-- Minimum GPA: {stats.get('GPA_min')}
-- Minimum SAT Score: {stats.get('SAT_min')}
-- Minimum IELTS Score: {stats.get('IELTS_min')}
-- Maximum Annual Cost: ${stats.get('international_cost_max')}{csv_context}
-
-CRITICAL REQUIREMENTS:
-- PRIMARY SOURCE: Research online extensively - Wikipedia, university websites, educational databases - to gather substantial information about this university
-- SECONDARY SOURCE: Supplement and verify with the database information provided above
-- The description must be AT LEAST 8-12 sentences (250-350 words minimum)
-- Include specific facts, dates, names, program names, research achievements from online sources
-- Reference rankings, acceptance rates, scholarships from both online research AND the database
-- Avoid generic statements - use concrete facts, specific details, and real information
-- Write in a professional, informative tone suitable for prospective students
-- Make the description rich, detailed, and informative - draw substantially from online research"""
-                
-                # Try up to 3 times to get a description of adequate length
-                max_retries = 3
-                for attempt in range(max_retries):
-                    try:
-                        response = model.generate_content(prompt)
-                        text = (response.text or "").strip()
-                        if text:
-                            # Check if description meets minimum length (at least 8 sentences or ~250 words)
-                            sentence_count = text.count('.') + text.count('!') + text.count('?')
-                            word_count = len(text.split())
-                            
-                            if sentence_count >= 8 and word_count >= 230:
-                                return text
-                            elif attempt < max_retries - 1:
-                                # Retry with a more explicit prompt about length and online research
-                                prompt = f"""The previous description was too short or insufficient. You MUST research online extensively and write a MUCH LONGER, comprehensive description (MINIMUM 10-15 sentences, 300-400 words) about {university_name} in {country}.
-
-CRITICAL: Research online NOW - search Wikipedia, university websites, educational databases for:
-- Founding year and history
-- Notable alumni and famous graduates
-- Specific program names and research centers
-- Campus facilities and student life details
-- International partnerships
-- Recent achievements or rankings
-- Location advantages and city information
-
-You MUST include from database:
-- Specific ranking numbers: {csv_info.get('national_ranking', 'N/A')} nationally, {csv_info.get('global_ranking', 'N/A')} globally
-- Acceptance rate: {csv_info.get('acceptance_rate', 'N/A')}
-- Scholarship availability: {csv_info.get('scholarship', 'N/A')}
-- Institution type: {csv_info.get('public_private', 'N/A')}
-- Student-faculty ratio: {csv_info.get('student_faculty_ratio', 'N/A')}
-- Language of instruction: {csv_info.get('language_of_teaching', 'N/A')}
-- Admission requirements: GPA {stats.get('GPA_min')}, SAT {stats.get('SAT_min')}, IELTS {stats.get('IELTS_min')}
-- Cost: ${stats.get('international_cost_max')} for international students
-
-Write a detailed, rich description that is AT LEAST 10-15 sentences (300-400 words). Draw substantially from online research - include specific facts, dates, names, program names, research achievements, and concrete details from online sources. This must be a comprehensive description, not a brief summary."""
-                                continue
-                            else:
-                                # Last attempt, return what we have even if short
-                                return text
-                    except Exception as quota_error:
-                        # Check if it's a ResourceExhausted error
-                        if google_exceptions and isinstance(quota_error, google_exceptions.ResourceExhausted):
-                            # Handle quota exceeded errors with exponential backoff
-                            error_str = str(quota_error)
-                            print(f"QUOTA ERROR with {model_name}: {error_str}")
-                            
-                            # Extract retry delay if available
-                            retry_delay = 60  # Default 60 seconds
-                            if 'retry in' in error_str.lower() or 'retry_delay' in error_str.lower():
-                                # Try to extract seconds from error message
-                                import re
-                                delay_match = re.search(r'(\d+\.?\d*)\s*seconds?', error_str, re.IGNORECASE)
-                                if delay_match:
-                                    retry_delay = int(float(delay_match.group(1))) + 5  # Add 5 second buffer
-                            
-                            # If this is the first model and we have another to try, skip to next model
-                            if model_name == model_names[0] and len(model_names) > 1:
-                                print(f"Quota exceeded for {model_name}, trying next model...")
-                                break  # Try next model
-                            
-                            # If quota exceeded, return fallback immediately (don't wait)
-                            print(f"WARNING: Quota exceeded for all models. Using fallback description.")
-                            raise quota_error  # Will be caught by outer handler
-                        
-                        # If not a quota error, treat as regular API error
-                        # For other API errors, log and continue to next model
-                        print(f"API Error with {model_name} (attempt {attempt + 1}): {quota_error}")
-                        if attempt < max_retries - 1:
-                            # Exponential backoff for other errors
-                            time.sleep(2 ** attempt)
-                            continue
-                        else:
-                            # Last attempt failed, try next model
-                            break
-                
-                # If we got here, this model didn't work, try next
+    
+    model_names = ['gemini-flash-latest', 'gemini-2.5-pro']
+    max_retries = 2
+    
+    for model_name in model_names:
+        try:
+            model = get_llm_model(model_name)
+            for attempt in range(max_retries):
+                try:
+                    response = model.generate_content(prompt)
+                    text = (response.text or '').strip()
+                    if not text:
+                        continue
+                    sentence_count = text.count('.') + text.count('!') + text.count('?')
+                    word_count = len(text.split())
+                    if sentence_count >= 5 and word_count >= 140:
+                        return text
+                    if attempt < max_retries - 1:
+                        prompt = f"The previous answer was too short. Rewrite with 6-7 sentences and include concrete facts about {university_name}.\n\nUniversity data:\n{data_block}"
+                        continue
+                    return text
+                except Exception as inner_error:
+                    if attempt < max_retries - 1:
+                        time.sleep(2 ** attempt)
+                        continue
+                    raise inner_error
+        except Exception as model_error:
+            if google_exceptions and isinstance(model_error, google_exceptions.ResourceExhausted):
+                print(f"Quota exceeded for {model_name}, trying next model or fallback...")
                 continue
-                
-            except Exception as quota_error:
-                # Check if it's a ResourceExhausted error
-                if google_exceptions and isinstance(quota_error, google_exceptions.ResourceExhausted):
-                    # Quota exceeded for this model, try next or fallback
-                    print(f"Quota exceeded for {model_name}, trying next model or fallback...")
-                    continue
-                # If not quota error, re-raise
-                raise
-            except Exception as model_error:
-                print(f"Error with model {model_name}: {model_error}")
-                import traceback
-                traceback.print_exc()
-                continue
-        
-        # If all models failed, return a fallback
-        print(f"WARNING: All LLM models failed for {university_name}. Using fallback description.")
-        return build_csv_fallback_description(university_name, country, stats, csv_info)
-    except Exception as quota_error:
-        # Check if it's a ResourceExhausted error
-        if google_exceptions and isinstance(quota_error, google_exceptions.ResourceExhausted):
-            # Quota exceeded - return informative fallback
-            print(f"QUOTA EXCEEDED: Cannot generate AI description for {university_name}. Free tier limit reached.")
-            print("SOLUTION: Upgrade to a paid Google Cloud account or wait for quota reset (typically daily).")
-            return build_csv_fallback_description(university_name, country, stats, csv_info)
-    except Exception as e:
-        print(f"ERROR getting AI description for {university_name}: {e}")
-        import traceback
-        traceback.print_exc()
-        return build_csv_fallback_description(university_name, country, stats, csv_info)
+            print(f"Error with model {model_name}: {model_error}")
+            import traceback
+            traceback.print_exc()
+            continue
+    
+    print(f"WARNING: All LLM models failed for {university_name}. Using fallback description.")
+    return build_csv_fallback_description(university_name, country, stats, csv_info)
 
 def get_short_university_description(university_name, country, csv_info=None):
     """Generate a short, complete university description (2-3 sentences)"""
