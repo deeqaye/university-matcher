@@ -715,8 +715,8 @@ University data:
                     if sentence_count >= 5 and word_count >= 140:
                         return text
                         if attempt < max_retries - 1:
-                        prompt = f"The previous answer was too short. Rewrite with 6-7 sentences and include concrete facts about {university_name}.\n\nUniversity data:\n{data_block}"
-                        continue
+                            prompt = f"The previous answer was too short. Rewrite with 6-7 sentences and include concrete facts about {university_name}.\n\nUniversity data:\n{data_block}"
+                            continue
                     return text
                 except Exception as inner_error:
                     if attempt < max_retries - 1:
