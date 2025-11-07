@@ -139,6 +139,35 @@
 
 ---
 
+## Option 4: Streamlit Community Cloud
+
+### Why Streamlit?
+- ✅ Free tier with generous usage for interactive dashboards
+- ✅ Zero server management – Streamlit handles scaling
+- ✅ Fast to iterate when you only need a single-page app
+
+### Steps:
+
+1. **Use the provided Streamlit folder**
+   - The repository now includes `streamlit_app/` with `app.py`, `requirements.txt`, and a README.
+
+2. **Deploy via Streamlit Community Cloud**
+   - Visit [share.streamlit.io](https://share.streamlit.io)
+   - Click **Deploy an app** and connect your GitHub repository
+   - Set the entry point to `streamlit_app/app.py`
+   - (Optional) set the working directory to `streamlit_app` in Advanced Settings
+
+3. **Dependencies**
+   - Paste the contents of `streamlit_app/requirements.txt` into the “Python packages” box or rely on the file automatically.
+
+4. **Data availability**
+   - Ensure `data.csv` (and optionally `info.csv`) remain in the repository root so the Streamlit runtime can load them.
+
+5. **Launch**
+   - Streamlit will build and serve the app at a URL like `https://your-workspace.streamlit.app`.
+
+---
+
 ## 📝 Pre-Deployment Checklist
 
 ### Files Already Created ✅
