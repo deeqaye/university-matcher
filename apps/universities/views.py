@@ -1247,10 +1247,10 @@ def results(request):
                 uni['public_private'] = csv_info.get('public_private', 'N/A') if csv_info else 'N/A'
                 uni['website'] = csv_info.get('website', 'N/A') if csv_info else 'N/A'
                 
-                pref_text = generate_preference_paragraph(uni['university'], uni['country'], user_input, user_preferences)
-                if not pref_text:
-                    pref_text = build_user_fit_summary(uni, user_input, user_preferences)
-                uni['preference_explanation'] = pref_text
+                pref_paragraph = generate_preference_paragraph(uni['university'], uni['country'], user_input, user_preferences)
+                if not pref_paragraph:
+                    pref_paragraph = build_user_fit_summary(uni, user_input, user_preferences)
+                uni['preference_explanation'] = pref_paragraph
                 
                 enriched_results.append(uni)
             

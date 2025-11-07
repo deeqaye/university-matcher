@@ -36,15 +36,21 @@ def load_module(module_name: str, file_path: Path):
     return module
 
 
-uni_find_module = load_module(
-    "apps.universities.uni_find", BASE_DIR / "apps" / "universities" / "uni_find.py"
-)
-uni_views = load_module(
-    "apps.universities.views", BASE_DIR / "apps" / "universities" / "views.py"
-)
-
-calculate_match_score = uni_find_module.calculate_match_score
-preprocess_university_data = uni_find_module.preprocess_university_data
+try:
+    from apps.universities import views as uni_views  # type: ignore
+    from apps.universities.uni_find import (  # type: ignore
+        calculate_match_score,
+        preprocess_university_data,
+    )
+except Exception:
+    uni_find_module = load_module(
+        "apps.universities.uni_find", BASE_DIR / "apps" / "universities" / "uni_find.py"
+    )
+    uni_views = load_module(
+        "apps.universities.views", BASE_DIR / "apps" / "universities" / "views.py"
+    )
+    calculate_match_score = uni_find_module.calculate_match_score
+    preprocess_university_data = uni_find_module.preprocess_university_data
 
 
 st.set_page_config(page_title="University Matcher", layout="wide")
