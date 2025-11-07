@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import os
+import importlib.util
 import pandas as pd
 import streamlit as st
 from urllib.parse import quote
@@ -24,11 +25,26 @@ if str(BASE_DIR) not in sys.path:
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "university_matcher.settings")
 django.setup()
 
-from apps.universities.uni_find import (  # type: ignore  # pylint: disable=import-error
-    calculate_match_score,
-    preprocess_university_data,
+
+def load_module(module_name: str, file_path: Path):
+    spec = importlib.util.spec_from_file_location(module_name, file_path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module {module_name} from {file_path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    sys.modules[module_name] = module
+    return module
+
+
+uni_find_module = load_module(
+    "apps.universities.uni_find", BASE_DIR / "apps" / "universities" / "uni_find.py"
 )
-from apps.universities import views as uni_views  # type: ignore  # pylint: disable=import-error
+uni_views = load_module(
+    "apps.universities.views", BASE_DIR / "apps" / "universities" / "views.py"
+)
+
+calculate_match_score = uni_find_module.calculate_match_score
+preprocess_university_data = uni_find_module.preprocess_university_data
 
 
 st.set_page_config(page_title="University Matcher", layout="wide")
