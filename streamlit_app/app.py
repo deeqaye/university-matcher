@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """Streamlit front-end for the University Matcher dataset."""
 
 from __future__ import annotations
@@ -9,21 +10,26 @@ from typing import Any, Dict, List, Optional
 import os
 import importlib.util
 import pandas as pd
-import streamlit as st
+import streamlit as st  # type: ignore
 from urllib.parse import quote
 import re
 import base64
 from html import escape
 import requests
 import django
+from functools import lru_cache
+from types import ModuleType
+from django.apps import apps as django_apps
 
 # Ensure the Django project modules are importable
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.append(str(BASE_DIR))
 
+STREAMLIT_ENABLE_DJANGO = (
+    os.getenv("STREAMLIT_ENABLE_DJANGO", "false").strip().lower() in {"1", "true", "yes"}
+)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "university_matcher.settings")
-django.setup()
 
 
 def load_module(module_name: str, file_path: Path):
@@ -37,20 +43,28 @@ def load_module(module_name: str, file_path: Path):
 
 
 try:
-    from apps.universities import views as uni_views  # type: ignore
-    from apps.universities.uni_find import (  # type: ignore
-        calculate_match_score,
-        preprocess_university_data,
-    )
-except Exception:
     uni_find_module = load_module(
         "apps.universities.uni_find", BASE_DIR / "apps" / "universities" / "uni_find.py"
     )
-    uni_views = load_module(
-        "apps.universities.views", BASE_DIR / "apps" / "universities" / "views.py"
-    )
-    calculate_match_score = uni_find_module.calculate_match_score
-    preprocess_university_data = uni_find_module.preprocess_university_data
+except Exception as exc:  # pragma: no cover - diagnostics only
+    raise RuntimeError(f"Unable to load matching utilities: {exc}") from exc
+
+calculate_match_score = uni_find_module.calculate_match_score
+preprocess_university_data = uni_find_module.preprocess_university_data
+
+
+@lru_cache(maxsize=1)
+def load_django_views_module() -> ModuleType:
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "university_matcher.settings")
+    if not django_apps.ready:
+        django.setup()
+    try:
+        from apps.universities import views as views_module  # type: ignore
+    except Exception:
+        views_module = load_module(
+            "apps.universities.views", BASE_DIR / "apps" / "universities" / "views.py"
+        )
+    return views_module
 
 
 st.set_page_config(page_title="University Matcher", layout="wide")
@@ -255,7 +269,14 @@ def build_preference_explanation(
     return " ".join(lines)
 
 
-def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd.Series], user_input: Dict[str, Any], llm_meta: Optional[Dict[str, Any]]) -> None:
+def render_result_card(
+    index: int,
+    record: Dict[str, Any],
+    info_row: Optional[pd.Series],
+    user_input: Dict[str, Any],
+    llm_meta: Optional[Dict[str, Any]],
+    uni_views: Optional[ModuleType],
+) -> None:
     university = record["university"]
     country = record["country"]
     match_score = int(record.get("match_score", 0))
@@ -269,7 +290,7 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
     }
 
     preference_text: Optional[str] = None
-    if hasattr(uni_views, "generate_preference_paragraph"):
+    if uni_views is not None and hasattr(uni_views, "generate_preference_paragraph"):
         try:
             preference_text = uni_views.generate_preference_paragraph(university, country, user_input, user_input.get("preferences_text"))
         except Exception as exc:
@@ -281,7 +302,7 @@ def render_result_card(index: int, record: Dict[str, Any], info_row: Optional[pd
         )
 
     short_description = ""
-    if getattr(uni_views, "GEMINI_ENABLED", False):
+    if uni_views is not None and getattr(uni_views, "GEMINI_ENABLED", False):
         try:
             short_description = uni_views.get_short_university_description(university, country, info_row)
         except Exception:
@@ -447,9 +468,21 @@ def main() -> None:
     selected_records = matches_records[:top_n]
     llm_meta_map: Dict[str, Dict[str, Any]] = {}
 
-    if preferences_prompt and getattr(uni_views, "GEMINI_ENABLED", False):
+    uni_views_module: Optional[ModuleType] = None
+    django_error: Optional[str] = None
+    if STREAMLIT_ENABLE_DJANGO:
         try:
-            llm_selected = uni_views.select_top_universities_with_llm(matches_records, preferences_prompt, user_input)
+            uni_views_module = load_django_views_module()
+        except Exception as exc:  # pragma: no cover - diagnostics only
+            django_error = str(exc)
+            st.warning(
+                "Django-powered enrichments are disabled for this session. "
+                "The app will continue with built-in descriptions."
+            )
+
+    if preferences_prompt and uni_views_module is not None and getattr(uni_views_module, "GEMINI_ENABLED", False):
+        try:
+            llm_selected = uni_views_module.select_top_universities_with_llm(matches_records, preferences_prompt, user_input)
             if llm_selected:
                 llm_meta_map = {item["university"]: item for item in llm_selected}
                 ordered_names = [item["university"] for item in llm_selected]
@@ -461,7 +494,7 @@ def main() -> None:
 
     for idx, record in enumerate(selected_records, start=1):
         info_row = find_info_row(info_df, record["university"], record["country"])
-        render_result_card(idx, record, info_row, user_input, llm_meta_map.get(record["university"]))
+        render_result_card(idx, record, info_row, user_input, llm_meta_map.get(record["university"]), uni_views_module)
         st.divider()
 
 
