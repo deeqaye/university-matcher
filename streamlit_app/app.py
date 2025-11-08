@@ -380,8 +380,23 @@ def main() -> None:
     st.title("University Matcher – Streamlit Edition")
     st.write("Discover universities that align with your background, proficiency, and budget in just a few clicks.")
 
-    datasets = load_datasets()
-    info_df = load_info_dataframe()
+    try:
+        datasets = load_datasets()
+    except FileNotFoundError:
+        st.error(
+            "The core dataset `data.csv` is missing. Please ensure it is present "
+            "at `streamlit_app/data.csv` (or alongside `manage.py`) and redeploy."
+        )
+        st.stop()
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        st.error(f"Unable to load the dataset: {exc}")
+        st.stop()
+
+    try:
+        info_df = load_info_dataframe()
+    except Exception as exc:  # pragma: no cover - diagnostics only
+        st.warning(f"Failed to load `info.csv`: {exc}")
+        info_df = None
 
     raw_df = datasets["raw"]
     processed_df = datasets["processed"]
